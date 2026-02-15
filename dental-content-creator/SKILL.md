@@ -200,9 +200,36 @@ Two columns, checkmarks and X marks, professional but approachable."
 5. **Use panel layouts** — "show in 4 panels" or "step-by-step from left to right" for procedures
 6. **Iterate** — first generation not perfect? Add more detail to your prompt and regenerate
 
-### 🏥 Customization Ideas
+### 🏥 Auto Brand Extraction (Share Your Clinic's Asset)
 
-- **Clinic branding**: Generate illustrations, then overlay your clinic logo using any image editor or Canva
+The script can **automatically extract your clinic's brand style** from any existing asset (logo, business card, brochure, website screenshot). Just pass `--brand-asset` and it will analyze the colors, typography, and design style, then apply them to every image it generates.
+
+```bash
+# Share your clinic's logo or brochure - the AI extracts the style automatically
+python generate_dental_image.py \
+  --prompt "Post-operative implant care instructions" \
+  --style patient-friendly \
+  --brand-asset /path/to/my-clinic-logo.png \
+  --output branded-instructions.png
+
+# Works with any visual asset: logo, business card, brochure, website screenshot
+python generate_dental_image.py \
+  --prompt "Dental implant stages infographic" \
+  --style infographic \
+  --brand-asset /path/to/clinic-brochure.pdf \
+  --output branded-infographic.png
+```
+
+**What it extracts:**
+- Primary and secondary brand colors (hex codes)
+- Typography style (serif/sans-serif, weight)
+- Overall design feel (modern/classic/playful/clinical)
+- Logo description and recurring design patterns
+
+**Pro tip:** Share a single well-designed asset (your best brochure or website screenshot) and the AI will match that style across ALL your generated content. Consistent branding without a graphic designer.
+
+### 🎨 More Customization Ideas
+
 - **Multi-language**: Add "include text labels in Portuguese/Spanish/German" to your prompt
 - **Print-ready**: Add "high resolution, suitable for printing at A4 size" to your prompt
 - **Series consistency**: Use the same style keywords across prompts for a cohesive visual set

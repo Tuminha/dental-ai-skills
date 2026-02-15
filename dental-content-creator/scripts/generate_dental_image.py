@@ -49,7 +49,43 @@ STYLE_PRESETS = {
 }
 
 
-def generate_image(prompt: str, style: str = "clinical", output: str = "output.png") -> Path:
+def extract_brand_style(image_path: str, api_key: str) -> str:
+    """Analyze a clinic's existing asset to extract brand colors, fonts, and style."""
+    import mimetypes
+
+    path = Path(image_path)
+    if not path.exists():
+        print(f"❌ Brand asset not found: {image_path}")
+        sys.exit(1)
+
+    mime_type = mimetypes.guess_type(str(path))[0] or "image/png"
+    image_bytes = path.read_bytes()
+    b64 = base64.b64encode(image_bytes).decode()
+
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-exp",
+        contents=[
+            types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            types.Part.from_text(
+                "Analyze this dental clinic's branding asset. Extract:\n"
+                "1. Primary and secondary brand colors (hex codes)\n"
+                "2. Typography style (serif/sans-serif, weight, feel)\n"
+                "3. Overall design style (modern/classic/playful/clinical)\n"
+                "4. Logo description if visible\n"
+                "5. Any recurring design patterns or motifs\n\n"
+                "Return a concise style guide I can use to generate matching visuals."
+            ),
+        ],
+    )
+
+    style_guide = response.candidates[0].content.parts[0].text
+    print(f"🎨 Extracted brand style from {path.name}:")
+    print(f"   {style_guide[:200]}...")
+    return style_guide
+
+
+def generate_image(prompt: str, style: str = "clinical", output: str = "output.png", brand_asset: str = None) -> Path:
     """Generate a dental image via Gemini 2.0 Flash and save it."""
 
     # Resolve API key
@@ -59,9 +95,15 @@ def generate_image(prompt: str, style: str = "clinical", output: str = "output.p
         print("   Get one free at https://aistudio.google.com/apikey")
         sys.exit(1)
 
+    # Extract brand style if asset provided
+    brand_context = ""
+    if brand_asset:
+        brand_context = extract_brand_style(brand_asset, api_key)
+        brand_context = f"\n\nIMPORTANT - Match this clinic's brand style:\n{brand_context}\n"
+
     # Build the final prompt
     preset = STYLE_PRESETS.get(style, STYLE_PRESETS["clinical"])
-    full_prompt = preset.format(prompt=prompt)
+    full_prompt = preset.format(prompt=prompt) + brand_context
 
     print(f"🦷 Generating image with style '{style}'...")
     print(f"   Prompt: {prompt}")
@@ -103,8 +145,13 @@ def main():
         default="clinical",
         help="Style preset: clinical, patient-friendly, or infographic (default: clinical)",
     )
+    parser.add_argument(
+        "--brand-asset", "-b",
+        default=None,
+        help="Path to an existing clinic asset (logo, brochure, business card) to extract brand style from",
+    )
     args = parser.parse_args()
-    generate_image(args.prompt, args.style, args.output)
+    generate_image(args.prompt, args.style, args.output, args.brand_asset)
 
 
 if __name__ == "__main__":
