@@ -1,0 +1,9 @@
+.DS_Store
+*.pdf
+*.docx
+.env
+node_modules/
+__pycache__/
+*.pyc
+.vscode/
+.idea/
