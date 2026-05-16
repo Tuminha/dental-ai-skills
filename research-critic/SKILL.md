@@ -117,9 +117,41 @@ Select the correct risk-of-bias instrument based on the study type and design st
 - Multiple-comparison correction (Bonferroni, Holm, FDR) where applicable?
 - Confidence intervals reported (not just p-values)?
 - Effect sizes reported? Clinical significance discussed separately from statistical significance?
-- Standard deviations plausible? (SD > mean in a strictly-positive measure such as bone gain = data integrity red flag.)
+- Standard deviations, IQRs, and ranges plausible and clinically interpretable? SD > mean in a strictly positive measure is a **dispersion / skew / predictability red flag**, not automatically a data-integrity problem.
 - Missing-data handling described? Sensitivity analyses performed?
 - **Clustering accounted for**: split-mouth, multiple implants per patient, multiple sites per tooth → require paired analyses, GEE, or mixed-effects models. Standard t-tests or chi-square on clustered data inflate Type I error.
+
+## Phase 4B: Statistical Forensics Triage (Mandatory for Quantitative Papers)
+
+For every paper with numerical outcomes, run this triage before the general conclusions. This is the minimum numerical audit; if any item is complex, missing, or central to the authors' claim, hand off to `dental-statistical-forensics`.
+
+| Check | Extract / judge | Red flag |
+|---|---|---|
+| Outcome type | Continuous / binary / ordinal / count / time-to-event / diagnostic / agreement | Wrong effect measure for the outcome type |
+| Unit of analysis | Patient / implant / tooth / site / surface / sinus / scan / histologic field | Unit analyzed as independent when nested or paired |
+| Effect estimate | Mean difference, risk ratio, odds ratio, hazard ratio, sensitivity/specificity, ICC, LoA, etc. | Conclusion based only on p-value |
+| Precision | 95% CI, SE, or data needed to approximate uncertainty | CI absent, wide, or crossing null / clinical threshold |
+| Dispersion | SD, IQR, range, coefficient of variation, SD/effect ratio | SD/IQR/range large relative to mean effect or clinical threshold |
+| Clinical threshold | MCID, failure threshold, diagnostic threshold, or contextual clinically important cutoff | Statistical significance below clinically meaningful magnitude |
+| Individual predictability | Whether patient-level/site-level outcomes remain reliable despite favorable mean | Mean effect hides many likely poor individual outcomes |
+| Sample size | Planned vs achieved n, power assumptions, smallest detectable difference | Underpowered but interpreted as definitive |
+| Missing data | Amount, reasons, balance, and likely direction of bias | Missingness plausibly related to poor outcome |
+| Multiplicity | Outcomes, time points, subgroup tests, adjustment | Many tests with selective emphasis on significant results |
+| Model appropriateness | Paired/clustered/repeated-measures/survival/diagnostic model logic | Independent tests used for non-independent dental data |
+| Claim discipline | Whether conclusions match magnitude, precision, dispersion, and clinical threshold | "Predictable" or "clinically superior" claim unsupported by the numbers |
+
+Mandatory question: **Do the SDs, ranges, IQRs, confidence intervals, or measurement-error limits undermine the authors' claim of clinical predictability?**
+
+Hand off to `dental-statistical-forensics` when any of these are present:
+- SD, IQR, or range is large relative to the mean effect, MCID, or failure threshold.
+- CI is absent, wide, or crosses a clinically important threshold.
+- Multiple teeth, implants, sites, surfaces, sinuses, scans, or histologic fields are nested within patients.
+- Split-mouth, cluster-randomized, crossover, paired-site, or repeated-measures design.
+- More than 5 outcomes, time points, subgroup tests, or unadjusted comparisons.
+- Small sample with definitive clinical language.
+- Measurement error, examiner variability, CBCT/scan resolution, or agreement limits are close to the reported effect.
+- Survival and success are conflated, or time-to-event censoring is unclear.
+- Diagnostic accuracy, agreement, digital accuracy, meta-analysis, or pooled estimates drive the paper.
 
 ---
 
@@ -152,6 +184,7 @@ Actively check each. Flag at the listed severity if present:
 | Short follow-up claimed as long-term | 🔴 Critical | For implant outcomes: < 3 yr = short-term; < 5 yr = medium-term; ≥ 5 yr = long-term. Flag < 3-yr data sold as long-term evidence. |
 | Industry sponsorship undeclared or undiscussed in limitations | 🟡 Moderate | Check funding source and author–manufacturer ties (consulting, speaking, royalties). Flag if sponsorship exists but limitations section is silent. |
 | Implant-level vs patient-level reporting mismatch | 🔴 Critical | A study with 5 implants per patient does not have 5 independent observations. |
+| High dispersion / limited individual predictability | 🟡 Moderate (🔴 if central claim depends on predictability) | Mean effect is favorable, but SD / IQR / range is large relative to the effect, MCID, or failure threshold. Supports average benefit, not predictable individual outcome. |
 | Missing radiographic standardization | 🟡 Moderate | Bone-level measurement requires standardized paralleling technique, individualized film holders, or CBCT. Unstandardized periapical radiographs introduce measurement error. |
 | No examiner calibration for probing / CAL | 🟡 Moderate | Probing depth and clinical attachment level require calibrated examiners (kappa ≥ 0.8 or ICC ≥ 0.9). |
 | University-clinic / specialist-only setting generalized to GP | 🟡 Moderate | Operator-skill-dependent procedures (immediate placement, GBR, regenerative perio surgery) may not transfer to general practice. |
@@ -228,6 +261,21 @@ Respond:
 
 Provide the extracted PICO as the hand-off payload.
 
+## Hand-Off to Dental Statistical Forensics
+
+If the user asks whether the numbers actually support the conclusion, or if the paper contains high dispersion, missing/wide CIs, clustered dental units, many outcomes, measurement-error concerns, survival/success issues, diagnostic accuracy, agreement, or meta-analysis, hand off to `dental-statistical-forensics`.
+
+Pass this payload:
+- Paper title and study design.
+- Extracted outcomes and data type.
+- n per group / total n.
+- Effect estimates, SD / IQR / range, CI / SE / p-values.
+- Unit of randomization and unit of analysis.
+- Missing-data amounts and reasons.
+- Statistical model/test used.
+- Clinically important threshold / MCID if stated.
+- Exact author claims that depend on the numbers.
+
 ---
 
 ## Output Format
@@ -267,6 +315,10 @@ Provide the extracted PICO as the hand-off payload.
 
 ## Statistics
 [bullet points with severity emoji]
+
+## Statistical Forensics Triage
+[completed triage table: outcome type, unit of analysis, effect estimate, precision, dispersion, clinical threshold, individual predictability, sample size, missing data, multiplicity, model appropriateness, claim discipline]
+[State whether `dental-statistical-forensics` hand-off is required and why]
 
 ## Unit-of-Analysis Audit
 [explicit identification of levels present; flag mismatches]

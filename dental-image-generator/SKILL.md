@@ -1,3 +1,10 @@
+---
+name: dental-image-generator
+description: Use when the user asks to generate dental clinical illustrations, patient infographics, branded dental visuals, surgical diagrams, anatomy comparisons, post-op visual instructions, or social media graphics using the included Gemini image-generation workflow.
+when_to_use: User asks to generate or plan dental visuals, implant or periodontal illustrations, patient handout images, infographics, procedure diagrams, branded clinic visuals, or image-generation prompts/scripts for dental education.
+effort: high
+---
+
 # Dental Image Generator — AI Clinical Illustration Skill
 
 ## Identity

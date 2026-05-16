@@ -1,3 +1,10 @@
+---
+name: dental-content-creator
+description: Use when the user asks to create dental education, social media, patient-facing, professional, or evidence-backed content. Produces audience-aware posts, articles, patient handouts, platform adaptations for LinkedIn/X/Instagram, hooks, CTAs, and no-overclaim clinical messaging.
+when_to_use: User asks for dental content, social posts, patient education materials, LinkedIn posts, X threads, Instagram captions/carousels, clinical-to-plain-language translation, post-op instructions, myth-busting, or evidence-backed professional communication.
+effort: high
+---
+
 # Dental Content Creator — Evidence-Based Dental Content Skill
 
 ## Identity

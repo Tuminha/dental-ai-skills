@@ -4,6 +4,8 @@
 
 **Goal:** Add a SOTA numerical-skepticism layer to the Dental AI Skills repo so papers and evidence reviews are audited for dispersion, effect size, uncertainty, unit-of-analysis errors, missing data, multiplicity, model choice, measurement reliability, and dental-domain clinical interpretability.
 
+**Implementation status:** Implemented in `dental-statistical-forensics/` with integration hooks in `research-critic`, `clinical-evidence-reviewer`, and `dental-evidence-retriever`. Remaining future work is optional deterministic utilities, not the core instruction skill.
+
 **Architecture:** Keep `research-critic` and `clinical-evidence-reviewer` as the main user-facing workflows, but add a companion `dental-statistical-forensics` skill for deep numerical review. `research-critic` gets a mandatory lightweight triage checkpoint; `clinical-evidence-reviewer` gets explicit hand-off language for effect-size, imprecision, and GRADE downgrading. The new skill uses progressive disclosure: a concise `SKILL.md` plus focused `references/` modules for deep domain-specific checks.
 
 **Tech Stack:** Markdown Agent Skills (`SKILL.md`), YAML frontmatter, repo docs (`README.md`, `CLAUDE.md`, `TESTING.md`), optional pure-Python helper scripts for future deterministic calculations. No broad tool permissions.
@@ -69,11 +71,10 @@ Modify:
 - `TESTING.md`
   - Add manual tests for numerical traps and integration behavior.
 
-No changes needed:
+Metadata hygiene:
 
-- `dental-content-creator/SKILL.md`
-- `dental-image-generator/SKILL.md`
-- `LICENSE`
+- `dental-content-creator/SKILL.md` and `dental-image-generator/SKILL.md` now include YAML frontmatter so every skill folder validates consistently.
+- `LICENSE` remains unchanged.
 
 ---
 

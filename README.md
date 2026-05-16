@@ -15,20 +15,23 @@ Drop these into Claude Desktop, Claude Code, ChatGPT, or any AI that accepts cus
 | [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster/crossover/split-mouth, ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
 | [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Body-of-evidence reviews: runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline-vs-consensus distinction, patient selection, "what's unknown" |
 | [**Dental Evidence Retriever**](dental-evidence-retriever/) | Researchers, clinicians | Literature search workflow: PICO → PubMed/Cochrane/guideline-body/ClinicalTrials.gov/PROSPERO strategies → retrieval log. Honest about runtime — no fabricated citations |
+| [**Dental Statistical Forensics**](dental-statistical-forensics/) | Researchers, reviewers | Deep numerical audit: SD/range, CIs, effect sizes, MCID, individual predictability, unit-of-analysis errors, clustering, multiplicity, missing data, model appropriateness, measurement reliability, and claim-to-number discipline |
 | [**Dental Content Creator**](dental-content-creator/) | Educators & marketers | Audience-aware content with platform adaptations (LinkedIn/X/Instagram), no-overclaim guardrails, evidence-backed mode |
 | [**Dental Image Generator**](dental-image-generator/) | Anyone creating visuals | AI clinical illustrations via Google Gemini — surgical diagrams, patient infographics, branded content |
 
-**Scientific-literature workflow.** The three literature skills are designed to work together:
+**Scientific-literature workflow.** The four literature skills are designed to work together:
 
 ```
 Question → dental-evidence-retriever  →  body of evidence → clinical-evidence-reviewer
             (search strategy + log)                          (GRADE per outcome, guidelines, recommendations)
+                                      ↘ numerical disputes → dental-statistical-forensics
+                                        (effect size, SD/range, CI, MCID, model validity)
 
-Single paper to appraise → research-critic
-                            (single-paper credibility — not a clinical recommendation by itself)
+Single paper to appraise → research-critic → dental-statistical-forensics
+                            (single-paper credibility)         (numbers and predictability audit)
 ```
 
-`research-critic` and `clinical-evidence-reviewer` hand off to each other automatically when the user asks the wrong type of question of either one.
+`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, and `dental-statistical-forensics` hand off to each other automatically when a question belongs in another layer of the workflow.
 
 ---
 
@@ -64,6 +67,7 @@ mkdir -p ~/.claude/skills
 cp -r research-critic ~/.claude/skills/
 cp -r clinical-evidence-reviewer ~/.claude/skills/
 cp -r dental-evidence-retriever ~/.claude/skills/
+cp -r dental-statistical-forensics ~/.claude/skills/
 cp -r dental-content-creator ~/.claude/skills/
 cp -r dental-image-generator ~/.claude/skills/
 
@@ -72,13 +76,14 @@ mkdir -p your-project/.claude/skills
 cp -r research-critic your-project/.claude/skills/
 cp -r clinical-evidence-reviewer your-project/.claude/skills/
 cp -r dental-evidence-retriever your-project/.claude/skills/
+cp -r dental-statistical-forensics your-project/.claude/skills/
 cp -r dental-content-creator your-project/.claude/skills/
 cp -r dental-image-generator your-project/.claude/skills/
 ```
 
-If you only want the scientific-literature workflow for a given project, install just the first three.
+If you only want the scientific-literature workflow for a given project, install just the first four.
 
-Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`.
+Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`, `/dental-statistical-forensics`.
 
 ### Option C: ChatGPT / claude.ai / Other AI Platforms
 
@@ -122,6 +127,7 @@ The peer reviewer you wish you had. Feed it a single paper and get:
 - **Correct bias tool, in its native format** — auto-selects RoB 2 (with cluster, crossover, and split-mouth variants), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence — not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
 - **Unit-of-analysis audit** — patient / implant / tooth / site / surface levels, flags hierarchical-clustering mistakes.
 - **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, 2017 World Workshop definitions, short follow-up sold as long-term, implant-level vs patient-level mismatch, examiner calibration, radiographic standardization.
+- **Statistical Forensics Triage** — forces SD/range, CI, MCID, individual-predictability, multiplicity, missing-data, and model-appropriateness checks before the paper's numerical claims are accepted.
 - **Claim-to-evidence mapping** — checks every Discussion claim against the actual results.
 - **Study Credibility score** (renamed from "Overall Evidence Quality") — 0–3 per domain, total /18. High credibility ≠ "strong evidence for clinical use"; that's a body-of-evidence question and hands off to `clinical-evidence-reviewer`.
 - **Actionable output** — fatal flaws (up to 5, not forced), fixable issues, what would be needed to trust the study.
@@ -146,7 +152,18 @@ Literature-search workflow for dental clinical questions:
 - **Runtime-honest** — declares whether live retrieval is possible and never fabricates results.
 - **PICO → search strategy** for PubMed (MeSH + free-text), Cochrane CENTRAL, EFP/AAP/EAO/ITI/ADA/NICE/AAOMS guideline repositories, ClinicalTrials.gov, PROSPERO.
 - **Retrieval log** — reproducible Boolean queries, date, result counts, per-source status — that `clinical-evidence-reviewer` can consume directly.
-- **Hand-off** to `clinical-evidence-reviewer` (for grading) and `research-critic` (for single-paper appraisal).
+- **Hand-off** to `clinical-evidence-reviewer` (for grading), `research-critic` (for single-paper appraisal), and `dental-statistical-forensics` (for numerical audit).
+
+### Dental Statistical Forensics
+
+The numbers reviewer. Use it when the mean looks good but the SD, CI, MCID, missing data, clustering, or model choice may change the interpretation:
+
+- **Core numerical audit** — outcome type, unit of analysis, effect estimate, precision, dispersion, clinical threshold, individual predictability, sample size, missing data, multiplicity, model appropriateness, claim discipline.
+- **Dispersion and predictability lens** — explicitly asks whether SD / IQR / range undermine claims like "predictable," "clinically reliable," or "maintains esthetics."
+- **Clinical threshold discipline** — compares effect size against MCID, failure thresholds, and measurement error instead of accepting p-values alone.
+- **Dental hierarchy checks** — patient / implant / tooth / site / surface / sinus / scan / histologic-field clustering.
+- **Domain modules** — ridge preservation and esthetic zone, sinus lift, periodontal treatment, implant outcomes, diagnostic accuracy, digital dentistry, and meta-analysis.
+- **Claim-to-number discipline** — separates average treatment effects from individual-patient reliability and flags overinterpretation.
 
 ### Dental Content Creator
 
@@ -182,11 +199,20 @@ AI models can hallucinate citations. The Clinical Evidence Reviewer requires an 
 **"Can I use more than one skill at once?"**
 Yes. Add multiple SKILL.md files to the same project. The AI will use whichever is relevant to your prompt. For best results with multiple skills, name the one you want in your prompt.
 
+**"How do I check that Claude Code can parse the skills?"**
+Run the included validator from the repo root:
+
+```bash
+python3 scripts/validate_skills.py
+```
+
+It checks every `*/SKILL.md` for YAML frontmatter and required metadata.
+
 ---
 
 ## Testing
 
-See [TESTING.md](TESTING.md) for manual test prompts and structural checks for each skill.
+See [TESTING.md](TESTING.md) for manual test prompts and structural checks for each skill. The `fixtures/` folder includes a compact Iasella-style ridge-preservation regression fixture for the high-SD / individual-predictability failure mode.
 
 ---
 

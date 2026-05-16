@@ -188,6 +188,7 @@ After producing the retrieval log:
 
 - If the user wants the body of evidence graded: hand off to `clinical-evidence-reviewer` with the retrieval log attached.
 - If the user wants individual papers critiqued: hand off to `research-critic` per paper.
+- If the user wants numerical extraction, effect-size interpretation, SD / CI / MCID review, or statistical validity checked from retrieved papers: hand off to `dental-statistical-forensics` with the extracted outcomes and citation metadata.
 - If the user wants more sources: produce additional strategies for hand-searching specific journals (Journal of Clinical Periodontology, Clinical Oral Implants Research, International Journal of Oral & Maxillofacial Implants, Journal of Periodontology, Journal of Dental Research, etc.).
 
 ---
