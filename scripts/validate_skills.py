@@ -33,9 +33,23 @@ def parse_simple_frontmatter(block: str) -> dict[str, str]:
         line = raw.rstrip()
         if not line.strip():
             continue
-        if line.startswith((" ", "\t")) and current_key and folded:
-            data[current_key] = (data[current_key] + " " + line.strip()).strip()
-            continue
+        if line.startswith((" ", "\t")) and current_key:
+            stripped = line.strip()
+            if folded:
+                data[current_key] = (data[current_key] + " " + stripped).strip()
+                continue
+            if stripped.startswith("- "):
+                # Support common frontmatter lists such as:
+                # allowed-tools:
+                #   - Read
+                # The validator only needs required scalar keys, so storing a
+                # compact string representation is sufficient.
+                data[current_key] = (data[current_key] + " " + stripped[2:]).strip()
+                continue
+            if data.get(current_key, "") == "":
+                data[current_key] = stripped
+                continue
+            raise ValueError(f"cannot parse nested frontmatter line: {line!r}")
         if ":" not in line:
             raise ValueError(f"cannot parse frontmatter line: {line!r}")
         key, value = line.split(":", 1)
