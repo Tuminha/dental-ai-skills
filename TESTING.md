@@ -90,6 +90,85 @@ These are manual test prompts to verify each skill produces correct structured o
 
 ---
 
+## Dental Statistical Forensics
+
+### SF Test 1: High SD / Individual Predictability
+**Prompt:** "Audit the numbers in this ridge-preservation study. Ridge preservation horizontal change was -1.2 ± 0.9 mm, extraction alone was -2.6 ± 2.3 mm. Mid-buccal vertical change was +1.3 ± 2.0 mm for ridge preservation and -0.9 ± 1.6 mm for extraction alone. The ridge-preservation mid-buccal range was -2.0 to +4.5 mm. The authors say ridge preservation gives the most predictable maintenance in the esthetic zone."
+
+Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella2003-ridge-preservation.md), with expected flags in [`fixtures/iasella2003-expected-flags.md`](fixtures/iasella2003-expected-flags.md).
+
+**Check:**
+- [ ] Output acknowledges the favorable average effect
+- [ ] Output flags SD/range as limiting individual-patient/site predictability
+- [ ] Output explicitly weakens or rejects "predictable maintenance" as an overclaim
+- [ ] Output distinguishes average treatment effect from guaranteed clinical success
+- [ ] Output asks for or extracts n before approximating CIs; any approximation is labeled as approximate
+- [ ] Output discusses esthetic-zone clinical thresholds and likely need for case-specific augmentation planning
+
+### SF Test 2: Unit-of-Analysis / Clustering
+**Prompt:** "A retrospective implant study reports 180 implants in 52 patients. It analyzes peri-implantitis risk per implant using chi-square tests and says N=180 independent observations. Some patients contributed 5 implants."
+
+**Check:**
+- [ ] Unit of analysis identified as implant-level nested within patient
+- [ ] Independence violation flagged
+- [ ] Correct alternatives suggested (patient-level summary, GEE, mixed-effects model, robust SEs)
+- [ ] Output states that naive CIs/p-values may be too optimistic
+
+### SF Test 3: Informative Missing Data
+**Prompt:** "In a socket-preservation histology study, two extraction-only trephine cores could not be obtained because the sites had minimal bone fill. They were excluded from the histology analysis."
+
+**Check:**
+- [ ] Missingness is labeled likely informative / related to poor outcome
+- [ ] Direction of bias is discussed
+- [ ] Output says complete-case histology may make the control group look better or distort the comparison
+- [ ] Sensitivity analysis or worst-case handling requested
+
+### SF Test 4: Multiplicity and Selective Emphasis
+**Prompt:** "A perio study tested PD, CAL, BOP, plaque, gingival recession, keratinized tissue, radiographic bone fill, patient pain, and microbiology at 1, 3, 6, and 12 months. It highlights two p<0.05 secondary outcomes and concludes the adjunct is clinically superior."
+
+**Check:**
+- [ ] Counts many outcomes/time points as multiplicity risk
+- [ ] Checks whether a primary outcome was prespecified
+- [ ] Flags unadjusted secondary-outcome emphasis
+- [ ] Separates exploratory signals from confirmatory evidence
+
+### SF Test 5: Survival vs Success / Time-to-Event
+**Prompt:** "An implant paper reports 98% survival after 18 months and concludes the system has excellent implant success. It does not report marginal bone loss criteria, complications, or censoring details."
+
+**Check:**
+- [ ] Survival and success are distinguished
+- [ ] Short follow-up flagged for long-term inference
+- [ ] Missing success criteria and censoring details flagged
+- [ ] Correct time-to-event reporting requested (Kaplan-Meier, censoring, hazard estimates where appropriate)
+
+### SF Test 6: Diagnostic Accuracy Precision
+**Prompt:** "A CBCT diagnostic study reports sensitivity 0.91 and specificity 0.84 for detecting vertical root fracture, but gives no 95% CIs, no threshold definition, and uses tooth-level units from patients with multiple extracted teeth."
+
+**Check:**
+- [ ] Sensitivity/specificity treated as diagnostic accuracy outcomes, not generic binary outcomes
+- [ ] Missing CIs flagged as precision problem
+- [ ] Threshold definition and reference standard quality requested
+- [ ] Tooth-level clustering within patient flagged
+
+### SF Test 7: Research Critic Hand-off
+**Prompt:** "Using research-critic, appraise this study. I am especially worried that the SD is larger than the mean effect and the authors claim predictability."
+
+**Check:**
+- [ ] Research Critic runs the Statistical Forensics Triage section
+- [ ] Research Critic hands off to `dental-statistical-forensics` or states why hand-off is required
+- [ ] Hand-off payload includes outcome, n, effect estimate, SD/range/CI/p, unit of analysis, model/test, and author claim
+
+### SF Test 8: Clinical Evidence Reviewer Hand-off
+**Prompt:** "For immediate implant placement, does a 0.5 mm marginal bone-level difference justify changing practice if SDs are around 1.3 mm and measurement error may be 0.4 mm?"
+
+**Check:**
+- [ ] Clinical Evidence Reviewer keeps PICO and GRADE framing
+- [ ] It recognizes the question depends on numerical interpretation
+- [ ] It hands off to `dental-statistical-forensics` for MCID, dispersion, measurement error, and claim discipline
+- [ ] It does not make a practice recommendation from p-value or mean difference alone
+
+---
+
 ## Clinical Evidence Reviewer
 
 ### Test 9: Retrieval Mode Block (mandatory)
@@ -109,7 +188,8 @@ These are manual test prompts to verify each skill produces correct structured o
 **Check:**
 - [ ] PICO block appears before any evidence claims (Population, Intervention, Comparator, Outcomes, Setting, Time horizon)
 - [ ] Assumptions stated for any ambiguous element
-- [ ] Skill offers to refine PICO if user wants
+- [ ] Skill proceeds with explicit **PICO Assumptions** unless a missing detail would materially change the recommendation
+- [ ] Skill asks a clarification only when the missing detail would change the evidence interpretation
 
 ### Test 11: GRADE per Critical Outcome (NOT global)
 **Same prompt as Test 9**
@@ -260,9 +340,13 @@ These are manual test prompts to verify each skill produces correct structured o
 
 ## Running These Tests
 
-1. Load the relevant `SKILL.md` into your Claude Project or paste it as context
-2. Run each prompt
-3. Check all boxes for each test
-4. If any check fails, the skill needs adjustment
+1. Validate skill metadata:
+   ```bash
+   python3 scripts/validate_skills.py
+   ```
+2. Load the relevant `SKILL.md` into your Claude Project or paste it as context
+3. Run each prompt
+4. Check all boxes for each test
+5. If any check fails, the skill needs adjustment
 
 These are structural checks, not exact-text comparisons. The goal is: does the skill produce the right sections, in the right order, with the right kinds of content?

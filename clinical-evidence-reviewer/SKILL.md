@@ -75,7 +75,7 @@ Before any evidence synthesis, write the PICO. Most "compare A vs B" questions a
 - Time horizon: [short-term < 3 yr / medium-term 3–5 yr / long-term ≥ 5 yr]
 ```
 
-If any element is ambiguous, state the assumption you are making and offer the user the chance to refine it.
+If the PICO is underspecified, proceed using explicit assumptions unless the missing detail would materially change the answer. Put assumptions in a **PICO Assumptions** box. Ask a clarification question only when the missing detail would change the recommendation or evidence interpretation.
 
 ---
 
@@ -94,12 +94,18 @@ This is the highest-priority rule in this skill. Violations undermine the entire
    - `[Recalled citation — verify before use]` (when a DOI/PMID is recalled from memory and was not retrieved live)
    - Never omit the label.
 
-3. **Separate evidence types explicitly:**
+3. **Citation verification discipline:**
+   - Prefer PMID, DOI, or a direct guideline URL / official guideline document title.
+   - If a citation is recalled from memory but not verified live, mark it `[Recalled citation — verify before use]`.
+   - If a DOI or PMID is provided, do not invent missing metadata around it. Say `metadata not verified` if needed.
+   - If source metadata conflict (author/year/title/journal mismatch), state the conflict and do not use the citation as firm support until resolved.
+
+4. **Separate evidence types explicitly:**
    - **Empirical evidence** — clinical studies (cite them).
    - **Mechanistic reasoning** — biological plausibility without direct clinical data (label as such).
    - **Expert opinion / clinical experience** — consensus or tradition without trials (label as such).
 
-4. **Never present expert opinion as established evidence.** If a recommendation rests on Level V evidence alone, say so plainly.
+5. **Never present expert opinion as established evidence.** If a recommendation rests on Level V evidence alone, say so plainly.
 
 ---
 
@@ -158,6 +164,10 @@ For each outcome listed in PICO, produce one row:
 
 The Quick Answer may summarize an overall practical conclusion, but it must be **derived from the outcome-level certainty grades**, not asserted globally.
 
+### Numerical interpretation support
+
+When the recommendation depends on effect size, SD / IQR / range, confidence intervals, MCID, measurement error, heterogeneity, imprecision, survival analysis, diagnostic accuracy, or model choice, use `dental-statistical-forensics` before finalizing the outcome-level certainty. In the GRADE table, reflect numerical caveats in the **Effect estimate** and **Downgrade reasons** cells rather than hiding them in prose.
+
 ---
 
 ## Analysis Framework
@@ -204,6 +214,13 @@ Response template:
 **Hand off to `dental-evidence-retriever` when:**
 - The user wants the literature searched (PICO → search strategy → results list).
 - This skill is running with no network access and the user needs a workable search.
+
+**Hand off to `dental-statistical-forensics` when:**
+- The user asks about SD, CI, effect size, MCID, p-values, model choice, missing data, multiplicity, measurement error, survival analysis, diagnostic accuracy, or whether the numbers support the clinical interpretation.
+- A critical outcome is downgraded for imprecision, inconsistency, indirectness due to measurement setting, or uncertain clinical relevance and the numerical basis needs deeper audit.
+
+Response template:
+> This is a body-of-evidence question, but the recommendation depends on numerical interpretation. Use `dental-statistical-forensics` to audit effect size, precision, dispersion, clinical thresholds, unit-of-analysis, and claim discipline before finalizing the GRADE judgment.
 
 ---
 
