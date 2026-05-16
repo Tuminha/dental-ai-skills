@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Iasella statistical forensics report preview</title>
+  <desc id="desc">Static preview of a dental statistical forensics HTML report with verdict, metrics, and flags.</desc>
+  <rect width="1200" height="760" fill="#f7f8fb"/>
+  <rect x="70" y="52" width="1060" height="104" fill="#f7f8fb" stroke="#172033" stroke-width="0"/>
+  <text x="70" y="96" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="42" font-weight="800" fill="#172033">Iasella 2003 Ridge Preservation</text>
+  <text x="70" y="132" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" fill="#5b6475">Statistical forensics: dispersion, precision, and claim discipline</text>
+  <line x1="70" y1="166" x2="1130" y2="166" stroke="#172033" stroke-width="4"/>
+  <rect x="70" y="198" width="1060" height="120" rx="8" fill="#ffffff" stroke="#d8dde7"/>
+  <rect x="70" y="198" width="8" height="120" rx="4" fill="#b45309"/>
+  <text x="100" y="235" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="700" fill="#172033">Verdict</text>
+  <text x="100" y="272" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="21" fill="#172033">Average ridge preservation benefit, but SDs and ranges weaken claims of predictable esthetic-zone maintenance.</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <rect x="70" y="350" width="247" height="130" rx="8" fill="#ffffff" stroke="#d8dde7"/>
+    <text x="94" y="384" font-size="14" font-weight="700" fill="#5b6475">RP HORIZONTAL</text>
+    <text x="94" y="424" font-size="31" font-weight="800" fill="#172033">-1.2 +/- 0.9</text>
+    <text x="94" y="456" font-size="15" fill="#5b6475">Mean loss, moderate scatter</text>
+    <rect x="343" y="350" width="247" height="130" rx="8" fill="#ffffff" stroke="#d8dde7"/>
+    <text x="367" y="384" font-size="14" font-weight="700" fill="#5b6475">EXT HORIZONTAL</text>
+    <text x="367" y="424" font-size="31" font-weight="800" fill="#172033">-2.6 +/- 2.3</text>
+    <text x="367" y="456" font-size="15" fill="#5b6475">Large individual variability</text>
+    <rect x="616" y="350" width="247" height="130" rx="8" fill="#ffffff" stroke="#d8dde7"/>
+    <text x="640" y="384" font-size="14" font-weight="700" fill="#5b6475">MID-BUCCAL RP</text>
+    <text x="640" y="424" font-size="31" font-weight="800" fill="#172033">+1.3 +/- 2.0</text>
+    <text x="640" y="456" font-size="15" fill="#5b6475">SD exceeds mean gain</text>
+    <rect x="889" y="350" width="241" height="130" rx="8" fill="#ffffff" stroke="#d8dde7"/>
+    <text x="913" y="384" font-size="14" font-weight="700" fill="#5b6475">APPROX CI</text>
+    <text x="913" y="424" font-size="31" font-weight="800" fill="#172033">-0.1 to 2.9</text>
+    <text x="913" y="456" font-size="15" fill="#5b6475">Horizontal effect imprecise</text>
+  </g>
+  <rect x="70" y="512" width="1060" height="160" rx="8" fill="#ffffff" stroke="#d8dde7"/>
+  <text x="100" y="552" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="800" fill="#172033">Major Flags</text>
+  <rect x="100" y="582" width="484" height="54" rx="7" fill="#ffffff" stroke="#d8dde7"/>
+  <rect x="100" y="582" width="6" height="54" rx="3" fill="#b45309"/>
+  <text x="122" y="616" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="700" fill="#172033">Dispersion undermines individual predictability</text>
+  <rect x="616" y="582" width="484" height="54" rx="7" fill="#ffffff" stroke="#d8dde7"/>
+  <rect x="616" y="582" width="6" height="54" rx="3" fill="#b42318"/>
+  <text x="638" y="616" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="700" fill="#172033">Histology missingness likely informative</text>
+</svg>

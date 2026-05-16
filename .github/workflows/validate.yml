@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   validate-skills:
-    name: Validate SKILL.md frontmatter
+    name: Validate skills and smoke tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -24,3 +24,6 @@ jobs:
 
       - name: Run skill frontmatter validator
         run: python3 scripts/validate_skills.py
+
+      - name: Run repository smoke tests
+        run: python3 scripts/smoke_test_repo.py

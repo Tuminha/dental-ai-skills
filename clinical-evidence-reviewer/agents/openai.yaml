@@ -1,0 +1,7 @@
+interface:
+  display_name: "Clinical Evidence Reviewer"
+  short_description: "GRADE-based dental evidence review"
+  brand_color: "#047857"
+  default_prompt: "Use $clinical-evidence-reviewer to answer this dental clinical question with PICO, retrieval status, GRADE by outcome, guideline status, and uncertainty labels."
+policy:
+  allow_implicit_invocation: true

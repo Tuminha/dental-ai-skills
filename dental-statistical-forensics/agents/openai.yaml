@@ -1,0 +1,7 @@
+interface:
+  display_name: "Dental Statistical Forensics"
+  short_description: "Numerical audit for dental studies"
+  brand_color: "#B45309"
+  default_prompt: "Use $dental-statistical-forensics to audit the numbers, dispersion, confidence intervals, unit of analysis, missing data, and clinical interpretability in this study."
+policy:
+  allow_implicit_invocation: true
