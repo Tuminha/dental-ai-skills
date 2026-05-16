@@ -103,6 +103,8 @@ Claude Code reads the YAML frontmatter and auto-loads each skill when its descri
 
 The skills are plain markdown — they work anywhere that accepts text instructions.
 
+For skills with supporting resources, copy or upload the **full skill folder**, not only `SKILL.md`, whenever the platform allows it. This matters especially for `dental-statistical-forensics`, which depends on `dental-statistical-forensics/references/`, and for `dental-evidence-report-artifact`, which uses its `assets/` template and renderer script. If a platform only accepts one text prompt, paste `SKILL.md` plus the relevant reference files listed in the skill's "Reference Loading" or helper sections.
+
 ### Portability note: how the YAML frontmatter behaves across surfaces
 
 | Surface | Frontmatter fields read | Network access | Notes |
