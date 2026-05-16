@@ -1,7 +1,17 @@
 ---
 name: research-critic
-description: Use when the user asks to critique, peer-review, appraise, assess the credibility of, or evaluate the methodology, statistics, or bias of a single dental or oral-health research paper. Use for RCTs (including split-mouth/cluster/crossover), observational studies, diagnostic accuracy studies, systematic reviews and meta-analyses, animal studies, in-vitro dental studies, abstracts, and preprints. Do not use as the primary skill when the user asks "what does the evidence say" or "should I change practice" — for body-of-evidence questions, use clinical-evidence-reviewer.
-when_to_use: User asks to critique / review / peer-review / appraise / tear apart / assess bias / assess methodology / assess statistics / map claims to evidence in a specific paper, abstract, preprint, systematic review, RCT, cohort, case-control, diagnostic accuracy study, animal study, in-vitro dental study, or clinical dental article.
+description: >-
+  Use when the user asks to critique, peer-review, appraise, assess the credibility
+  of, or evaluate the methodology, statistics, or bias of a single dental or oral-health
+  research paper. Use for RCTs including split-mouth, cluster, and crossover designs;
+  observational studies; diagnostic accuracy studies; systematic reviews and meta-analyses;
+  animal studies; in-vitro dental studies; abstracts; and preprints. Do not use as the
+  primary skill when the user asks what the body of evidence says or whether to change practice.
+when_to_use: >-
+  User asks to critique, review, peer-review, appraise, tear apart, assess bias,
+  assess methodology, assess statistics, or map claims to evidence in a specific paper,
+  abstract, preprint, systematic review, RCT, cohort, case-control, diagnostic accuracy
+  study, animal study, in-vitro dental study, or clinical dental article.
 effort: high
 ---
 

@@ -171,6 +171,26 @@ def test_fixtures() -> None:
             fail(f"{path} missing Expected Flags section")
 
 
+def test_iasella_golden_concepts() -> None:
+    """Guard the fixture against losing its core statistical-forensics lesson."""
+    fixture = (ROOT / "fixtures" / "iasella2003-ridge-preservation.md").read_text(encoding="utf-8").lower()
+    expected = (ROOT / "fixtures" / "iasella2003-expected-flags.md").read_text(encoding="utf-8").lower()
+    combined = fixture + "\n" + expected
+    required_phrases = [
+        "favorable",
+        "average",
+        "sd",
+        "larger than the mean gain",
+        "range includes clinically relevant loss",
+        "predictable",
+        "must be softened",
+        "do not make a practice-change recommendation",
+    ]
+    missing = [phrase for phrase in required_phrases if phrase not in combined]
+    if missing:
+        fail(f"Iasella fixture missing required anti-regression concepts: {missing}")
+
+
 TESTS = [
     test_required_skills_present,
     test_skill_frontmatter_validator,
@@ -180,6 +200,7 @@ TESTS = [
     test_examples_and_artifact_renderer,
     test_helper_scripts,
     test_fixtures,
+    test_iasella_golden_concepts,
 ]
 
 
