@@ -73,6 +73,10 @@ Create:
   - Self-contained HTML, escaping, no external resources by default, no secret leakage, no hidden tracking, print/export, runtime behavior.
 - Optional later: `dental-html-report/scripts/render_report.py`
   - Deterministic renderer that accepts a structured JSON report object and writes a self-contained HTML file.
+- `docs/examples/html-reports/`
+  - Demo HTML files used only for README/gallery screenshots. Every demo must be clearly labeled as synthetic/example or generated from a documented source analysis.
+- `docs/assets/screenshots/`
+  - Optimized screenshots used in the README visual gallery.
 
 Modify:
 
@@ -85,7 +89,7 @@ Modify:
 - Planned `dental-statistical-forensics/SKILL.md`
   - Include an optional hand-off to `dental-html-report` in that implementation.
 - `README.md`
-  - Add the new skill, install lines, workflow diagram, and explanation of Markdown canonical output vs optional HTML artifact.
+  - Add the new skill, install lines, workflow diagram, visual gallery, and explanation of Markdown canonical output vs optional HTML artifact.
 - `CLAUDE.md`
   - Add report artifact skill and contributing rules around visual/citation integrity.
 - `TESTING.md`
@@ -703,9 +707,158 @@ Add:
 
 ---
 
-## Chunk 10: Manual Tests
+## Chunk 10: Visual Gallery And README Screenshots
 
-### Task 14: Expand TESTING.md
+### Task 14: Add Demo HTML Fixtures And Screenshot Assets
+
+**Files:**
+- Create: `docs/examples/html-reports/evidence-review-demo.html`
+- Create: `docs/examples/html-reports/statistical-forensics-demo.html`
+- Create: `docs/examples/html-reports/research-critic-demo.html`
+- Create: `docs/assets/screenshots/html-report-overview.png`
+- Create: `docs/assets/screenshots/statistical-forensics-preview.png`
+- Create: `docs/assets/screenshots/research-critic-preview.png`
+- Optional create: `docs/assets/screenshots/grade-dashboard-preview.png`
+- Modify: `README.md`
+
+- [ ] **Step 1: Create demo HTML fixtures**
+
+Create static demo HTML files that represent the intended report output.
+
+Rules:
+
+- Demo files must be clearly labeled: `Demo artifact - synthetic/example data`.
+- If using values inspired by a real paper, state: `Values shown for layout demonstration; verify against source before educational or clinical use`.
+- Do not include fabricated DOIs, PMIDs, author/year pairs, guideline claims, or patient identifiers.
+- Keep demo HTML self-contained: inline CSS, inline SVG, no external assets.
+- Prefer the same design tokens defined in `dental-html-report/references/design-system.md`.
+
+- [ ] **Step 2: Create the evidence review demo**
+
+`docs/examples/html-reports/evidence-review-demo.html` should show:
+
+- Evidence Retrieval Mode panel.
+- PICO card.
+- GRADE-by-critical-outcome table.
+- Treatment comparison panels.
+- Guideline status table.
+- Limitations/provenance section.
+
+All data should be clearly demo/synthetic unless generated from a completed verified review.
+
+- [ ] **Step 3: Create the statistical forensics demo**
+
+`docs/examples/html-reports/statistical-forensics-demo.html` should show:
+
+- Statistical Forensics Verdict.
+- Mean/SD/range visualization.
+- CI/MCID placeholder panel with `Not reported` state when CI is unavailable.
+- Unit-of-analysis/model audit.
+- Missing-data/multiplicity warning cards.
+- Claims-the-numbers-do-not-support section.
+
+Use an SD/range example that demonstrates the key concept:
+
+```text
+Mean effect favorable, but SD/range indicates limited individual predictability.
+```
+
+- [ ] **Step 4: Create the research critic demo**
+
+`docs/examples/html-reports/research-critic-demo.html` should show:
+
+- Study credibility score card.
+- Phase 0 extraction summary.
+- Bias-tool panel.
+- Severity heatmap.
+- Claim-to-evidence table.
+- Hand-off note to clinical evidence review.
+
+- [ ] **Step 5: Generate screenshots from the demo HTML**
+
+Use a deterministic browser screenshot workflow. Prefer Playwright if available:
+
+```bash
+mkdir -p docs/assets/screenshots
+npx playwright screenshot --viewport-size=1440,1100 "file://$(pwd)/docs/examples/html-reports/evidence-review-demo.html" docs/assets/screenshots/html-report-overview.png
+npx playwright screenshot --viewport-size=1440,1100 "file://$(pwd)/docs/examples/html-reports/statistical-forensics-demo.html" docs/assets/screenshots/statistical-forensics-preview.png
+npx playwright screenshot --viewport-size=1440,1100 "file://$(pwd)/docs/examples/html-reports/research-critic-demo.html" docs/assets/screenshots/research-critic-preview.png
+```
+
+If Playwright is unavailable, use the Codex/Claude browser screenshot workflow or another reproducible local browser capture. Record the command used in the PR body.
+
+- [ ] **Step 6: Optimize screenshots**
+
+Target:
+
+- Each screenshot ideally < 750 KB.
+- Use PNG for crisp text; WebP is acceptable if GitHub renders it reliably and alt text is present.
+- Avoid huge full-page screenshots that make the README slow.
+- Crop to first-screen/high-signal areas if needed.
+
+Validation:
+
+```bash
+du -h docs/assets/screenshots/*
+file docs/assets/screenshots/*
+```
+
+- [ ] **Step 7: Add README visual gallery**
+
+Near the top of `README.md`, after the introductory paragraph and before/after "What's Inside", add:
+
+```markdown
+## Preview
+
+<p align="center">
+  <img src="docs/assets/screenshots/html-report-overview.png" alt="Preview of a dental HTML evidence report with retrieval status, PICO, GRADE-by-outcome table, and treatment comparison panels" width="100%">
+</p>
+
+| Statistical Forensics | Research Critic |
+|---|---|
+| <img src="docs/assets/screenshots/statistical-forensics-preview.png" alt="Preview of a statistical forensics report showing mean, SD, range, and individual predictability warnings"> | <img src="docs/assets/screenshots/research-critic-preview.png" alt="Preview of a research critic report showing study credibility, severity heatmap, and claim-to-evidence mapping"> |
+```
+
+Keep alt text specific and descriptive.
+
+- [ ] **Step 8: Link demo HTML examples**
+
+In the README HTML artifact section, link to:
+
+- `docs/examples/html-reports/evidence-review-demo.html`
+- `docs/examples/html-reports/statistical-forensics-demo.html`
+- `docs/examples/html-reports/research-critic-demo.html`
+
+Warn that GitHub displays raw HTML source in the repo; users should download/open locally or use GitHub Pages if enabled.
+
+- [ ] **Step 9: Add optional GitHub Pages note**
+
+Add a short note:
+
+```markdown
+If GitHub Pages is enabled for this repo, demo reports can be published under `/docs/examples/html-reports/` for browser previews. Do not publish reports containing patient data or private review notes.
+```
+
+Do not enable Pages from the plan unless the user explicitly requests it.
+
+- [ ] **Step 10: Add gallery asset checks**
+
+Run:
+
+```bash
+test -s docs/assets/screenshots/html-report-overview.png
+test -s docs/assets/screenshots/statistical-forensics-preview.png
+test -s docs/assets/screenshots/research-critic-preview.png
+rg -n "Demo artifact|synthetic|example data" docs/examples/html-reports
+```
+
+Expected: screenshots exist and demo reports are clearly labeled.
+
+---
+
+## Chunk 11: Manual Tests
+
+### Task 15: Expand TESTING.md
 
 **Files:**
 - Modify: `TESTING.md`
@@ -765,9 +918,9 @@ In Codex / Claude Code:
 
 ---
 
-## Chunk 11: Validation
+## Chunk 12: Validation
 
-### Task 15: Static Validation
+### Task 16: Static Validation
 
 **Files:**
 - All created/modified files.
@@ -826,7 +979,65 @@ PY
 
 Expected: `README links OK`.
 
-### Task 16: Manual Render Validation
+### Task 17: Visual Asset Validation
+
+**Files:**
+- Use: `docs/assets/screenshots/`
+- Use: `docs/examples/html-reports/`
+- Use: `README.md`
+
+- [ ] **Step 1: Verify screenshot files exist**
+
+Run:
+
+```bash
+test -s docs/assets/screenshots/html-report-overview.png
+test -s docs/assets/screenshots/statistical-forensics-preview.png
+test -s docs/assets/screenshots/research-critic-preview.png
+```
+
+Expected: all commands exit 0.
+
+- [ ] **Step 2: Verify demo labels**
+
+Run:
+
+```bash
+rg -n "Demo artifact|synthetic|example data|layout demonstration" docs/examples/html-reports
+```
+
+Expected: every demo report clearly labels its data/provenance.
+
+- [ ] **Step 3: Verify README image links**
+
+Run:
+
+```bash
+rg -n "docs/assets/screenshots/.+\\.png" README.md
+python3 - <<'PY'
+from pathlib import Path
+import re
+text = Path("README.md").read_text()
+for target in re.findall(r'src="([^"]+)"', text):
+    if target.startswith("docs/assets/") and not Path(target).exists():
+        raise SystemExit(f"Missing README image: {target}")
+print("README images OK")
+PY
+```
+
+Expected: `README images OK`.
+
+- [ ] **Step 4: Verify image size budget**
+
+Run:
+
+```bash
+du -h docs/assets/screenshots/*
+```
+
+Expected: screenshots are reasonably sized for README use; optimize any very large image before merging.
+
+### Task 18: Manual Render Validation
 
 **Files:**
 - Use: `TESTING.md`
@@ -869,9 +1080,9 @@ Expected: browser opens the report directly; no server needed.
 
 ---
 
-## Chunk 12: Commit And PR
+## Chunk 13: Commit And PR
 
-### Task 17: Commit Implementation
+### Task 19: Commit Implementation
 
 **Files:**
 - All created/modified files.
@@ -892,7 +1103,7 @@ Expected: no whitespace errors.
 Run:
 
 ```bash
-git add dental-html-report research-critic/SKILL.md clinical-evidence-reviewer/SKILL.md dental-evidence-retriever/SKILL.md README.md CLAUDE.md TESTING.md
+git add dental-html-report docs/examples/html-reports docs/assets/screenshots research-critic/SKILL.md clinical-evidence-reviewer/SKILL.md dental-evidence-retriever/SKILL.md README.md CLAUDE.md TESTING.md
 git commit -m "feat: add dental html report artifact skill"
 ```
 
@@ -924,6 +1135,7 @@ PR body should include:
 - Why HTML is optional and downstream of analysis.
 - Security/portability guarantees.
 - Integration points.
+- README visual gallery and screenshot generation command.
 - Validation commands.
 - Manual render tests.
 - Whether renderer script was included or deferred.
@@ -940,6 +1152,9 @@ PR body should include:
 - [ ] No external CDN/network dependencies by default.
 - [ ] User-provided text is escaped.
 - [ ] Print/PDF behavior included.
+- [ ] README preview screenshots are generated from real demo HTML fixtures.
+- [ ] Demo visuals are clearly labeled synthetic/example unless backed by verified source analysis.
+- [ ] Screenshot file sizes are reasonable for README use.
 - [ ] README install snippets include the new skill.
 - [ ] TESTING.md includes render, no-data, security, and integration tests.
 
