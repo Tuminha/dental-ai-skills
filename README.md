@@ -12,10 +12,23 @@ Drop these into Claude Desktop, Claude Code, ChatGPT, or any AI that accepts cus
 
 | Skill | Who It's For | What It Does |
 |-------|-------------|--------------|
-| [**Research Critic**](research-critic/) | Researchers & PhD students | Structured paper critique: PICO extraction → bias tool selection (RoB 2/ROBINS-I/AMSTAR 2) → dental red flags → claim-to-evidence mapping → scored assessment |
-| [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Evidence-graded treatment reviews: GRADE certainty, mandatory citations, patient selection, "what's unknown" sections |
+| [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster/crossover/split-mouth, ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
+| [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Body-of-evidence reviews: runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline-vs-consensus distinction, patient selection, "what's unknown" |
+| [**Dental Evidence Retriever**](dental-evidence-retriever/) | Researchers, clinicians | Literature search workflow: PICO → PubMed/Cochrane/guideline-body/ClinicalTrials.gov/PROSPERO strategies → retrieval log. Honest about runtime — no fabricated citations |
 | [**Dental Content Creator**](dental-content-creator/) | Educators & marketers | Audience-aware content with platform adaptations (LinkedIn/X/Instagram), no-overclaim guardrails, evidence-backed mode |
 | [**Dental Image Generator**](dental-image-generator/) | Anyone creating visuals | AI clinical illustrations via Google Gemini — surgical diagrams, patient infographics, branded content |
+
+**Scientific-literature workflow.** The three literature skills are designed to work together:
+
+```
+Question → dental-evidence-retriever  →  body of evidence → clinical-evidence-reviewer
+            (search strategy + log)                          (GRADE per outcome, guidelines, recommendations)
+
+Single paper to appraise → research-critic
+                            (single-paper credibility — not a clinical recommendation by itself)
+```
+
+`research-critic` and `clinical-evidence-reviewer` hand off to each other automatically when the user asks the wrong type of question of either one.
 
 ---
 
@@ -34,27 +47,55 @@ Drop these into Claude Desktop, Claude Code, ChatGPT, or any AI that accepts cus
 
 ### Option B: Claude Code (Terminal)
 
+Claude Code supports two install scopes:
+
+| Scope | Path | Applies to |
+|---|---|---|
+| **Personal** | `~/.claude/skills/<skill-name>/SKILL.md` | All your projects |
+| **Project** | `<project>/.claude/skills/<skill-name>/SKILL.md` | One project only |
+
 ```bash
 # Clone the repo
 git clone https://github.com/Tuminha/dental-ai-skills.git
+cd dental-ai-skills
 
-# Copy skills to your Claude Code project
-cp -r dental-ai-skills/research-critic/ your-project/.claude/skills/
-cp -r dental-ai-skills/clinical-evidence-reviewer/ your-project/.claude/skills/
-cp -r dental-ai-skills/dental-content-creator/ your-project/.claude/skills/
-cp -r dental-ai-skills/dental-image-generator/ your-project/.claude/skills/
+# Option 1 — Personal install (recommended; available everywhere)
+mkdir -p ~/.claude/skills
+cp -r research-critic ~/.claude/skills/
+cp -r clinical-evidence-reviewer ~/.claude/skills/
+cp -r dental-evidence-retriever ~/.claude/skills/
+cp -r dental-content-creator ~/.claude/skills/
+cp -r dental-image-generator ~/.claude/skills/
+
+# Option 2 — Project install (scoped to one repo)
+mkdir -p your-project/.claude/skills
+cp -r research-critic your-project/.claude/skills/
+cp -r clinical-evidence-reviewer your-project/.claude/skills/
+cp -r dental-evidence-retriever your-project/.claude/skills/
 ```
 
-Skills in `.claude/skills/` are automatically available as project context in Claude Code.
+Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`.
 
-### Option C: ChatGPT / Other AI Platforms
+### Option C: ChatGPT / claude.ai / Other AI Platforms
 
-1. Open the `SKILL.md` file for the skill you want
-2. Copy the full contents
-3. In ChatGPT: Settings → Personalization → Custom Instructions → paste
-4. In other platforms: use whatever "custom instructions" or "system prompt" mechanism is available
+1. Open the `SKILL.md` file for the skill you want.
+2. Copy the full contents.
+3. In ChatGPT: Settings → Personalization → Custom Instructions → paste.
+4. In claude.ai: Projects → Custom Instructions → paste.
+5. In other platforms: use whatever "custom instructions" or "system prompt" mechanism is available.
 
 The skills are plain markdown — they work anywhere that accepts text instructions.
+
+### Portability note: how the YAML frontmatter behaves across surfaces
+
+| Surface | Frontmatter fields read | Network access | Notes |
+|---|---|---|---|
+| **Claude Code** | `name`, `description`, `when_to_use`, `effort`, `allowed-tools`, etc. (full Skills spec) | Full (via your machine) | Auto-discovery uses `description` + `when_to_use` to match prompts. `clinical-evidence-reviewer` and `dental-evidence-retriever` can perform real retrieval here. |
+| **claude.ai (Projects)** | Skill body is read; frontmatter is generally ignored or absorbed as context | Browsing varies by plan | Skills still work because the body is self-sufficient. Retrieval may or may not be possible — the retrieval-mode block handles this. |
+| **Claude API (Agent Skills)** | `name`, `description` (per the Agent Skills spec); other fields ignored | **No network by default** | Skills are pure instructions. `clinical-evidence-reviewer` will branch into "no live retrieval" mode and demand verified or labeled citations. |
+| **ChatGPT custom instructions** | Frontmatter ignored — only the body matters | Browsing if enabled | Same as above; the body is self-sufficient. |
+
+The skills are designed so the *body* is the contract. YAML frontmatter improves Claude Code ergonomics but is not required for the skill to work elsewhere.
 
 ### Option D: Image Generator (Requires Python)
 
@@ -71,24 +112,37 @@ python scripts/generate_dental_image.py --prompt "Your description" --style clin
 
 ### Research Critic
 
-The peer reviewer you wish you had. Feed it a paper and get:
+The peer reviewer you wish you had. Feed it a single paper and get:
 
-- **Mandatory extraction first** — PICO, study classification, and design essentials before any critique
-- **Correct bias tool** — automatically selects RoB 2, ROBINS-I, QUADAS-2, AMSTAR 2, or Newcastle-Ottawa based on study type
-- **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, short follow-up, implant-level vs patient-level mismatch
-- **Claim-to-evidence mapping** — checks if conclusions are actually supported by the results
-- **Scored assessment** — 0–3 per domain, total /18, with interpretation guide
-- **Actionable output** — top 5 fatal flaws, top 5 fixable issues, what's needed to trust the study
+- **Mandatory Phase 0 extraction first** — PICO, study classification (including randomization structure), unit of analysis, design essentials checklist — before any critique.
+- **Correct bias tool, in its native format** — auto-selects RoB 2 (with cluster, crossover, and split-mouth variants), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence — not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
+- **Unit-of-analysis audit** — patient / implant / tooth / site / surface levels, flags hierarchical-clustering mistakes.
+- **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, 2017 World Workshop definitions, short follow-up sold as long-term, implant-level vs patient-level mismatch, examiner calibration, radiographic standardization.
+- **Claim-to-evidence mapping** — checks every Discussion claim against the actual results.
+- **Study Credibility score** (renamed from "Overall Evidence Quality") — 0–3 per domain, total /18. High credibility ≠ "strong evidence for clinical use"; that's a body-of-evidence question and hands off to `clinical-evidence-reviewer`.
+- **Actionable output** — fatal flaws (up to 5, not forced), fixable issues, what would be needed to trust the study.
 
 ### Clinical Evidence Reviewer
 
-Evidence-based decision support with guardrails:
+Evidence-graded decision support, body-of-evidence and outcome-centric:
 
-- **Strict citation policy** — every claim cites a DOI/PMID or gets an explicit uncertainty label
-- **GRADE certainty** — High/Moderate/Low/Very Low with downgrading factors explained
-- **Patient selection** — who's a good candidate, risk factors, required diagnostics, failure modes
-- **What's unknown** — explicit gaps in the evidence, what studies would resolve them
-- **Safety first** — mandatory disclaimer, conservative recommendations, mechanistic reasoning separated from empirical evidence
+- **Evidence Retrieval Mode block** — declares runtime (Claude Code / claude.ai / API / unknown), whether live search is possible, what sources were searched. Prevents hallucinated citations in no-network runtimes.
+- **PICO before synthesis** — pins population, intervention, comparator, outcomes, setting, time horizon.
+- **GRADE certainty per critical outcome** — survival, marginal bone level change, biological complications, aesthetics (PES/WES), patient-reported, retreatment, adverse events. Not a single global rating.
+- **Guideline-vs-consensus distinction** — evidence-based guidelines (EFP S3, ADA EBD) are reported with methodology + strength + certainty as stated by the guideline. Pure expert consensus stays at Level V.
+- **Strict citation policy** — every clinical claim cites DOI/PMID/guideline document or carries an explicit uncertainty label.
+- **Currency check** — ✅ Current / ⚠️ Aging / 🔴 Outdated. Older sources are not automatically outdated.
+- **Patient selection, failure modes, what's unknown.**
+- **Hand-off to `research-critic`** when the user asks a single-paper question, and to `dental-evidence-retriever` when the literature has not been searched yet.
+
+### Dental Evidence Retriever
+
+Literature-search workflow for dental clinical questions:
+
+- **Runtime-honest** — declares whether live retrieval is possible and never fabricates results.
+- **PICO → search strategy** for PubMed (MeSH + free-text), Cochrane CENTRAL, EFP/AAP/EAO/ITI/ADA/NICE/AAOMS guideline repositories, ClinicalTrials.gov, PROSPERO.
+- **Retrieval log** — reproducible Boolean queries, date, result counts, per-source status — that `clinical-evidence-reviewer` can consume directly.
+- **Hand-off** to `clinical-evidence-reviewer` (for grading) and `research-critic` (for single-paper appraisal).
 
 ### Dental Content Creator
 
@@ -119,7 +173,7 @@ Start your prompt with the skill name: *"Using the Research Critic protocol, ana
 Make sure you're working inside the project/conversation where the skill is loaded. In Claude Desktop, conversations outside the project don't have access to project knowledge files.
 
 **"It's citing studies that don't exist."**
-AI models can hallucinate citations. The Evidence Reviewer skill has guardrails (uncertainty labels), but always verify DOIs before using them. Ask: *"Verify this citation — is it real?"*
+AI models can hallucinate citations. The Clinical Evidence Reviewer requires an Evidence Retrieval Mode block at the top of every response so you can immediately tell whether the citations come from a live search or from recalled memory. If retrieval was not possible, the skill must label recalled DOIs/PMIDs as `[Recalled citation — verify before use]`. Always verify DOIs before clinical or publication use. Ask: *"Verify this citation — is it real?"*
 
 **"Can I use more than one skill at once?"**
 Yes. Add multiple SKILL.md files to the same project. The AI will use whichever is relevant to your prompt. For best results with multiple skills, name the one you want in your prompt.
