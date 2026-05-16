@@ -1,0 +1,7 @@
+interface:
+  display_name: "Dental Image Generator"
+  short_description: "Dental visuals and illustration prompts"
+  brand_color: "#0891B2"
+  default_prompt: "Use $dental-image-generator to generate a clear dental clinical illustration or patient-friendly visual for this topic."
+policy:
+  allow_implicit_invocation: true

@@ -292,9 +292,31 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 
 ---
 
+## Dental Evidence Report Artifact
+
+### Test 21: HTML Artifact Generation
+**Prompt:** "Turn this completed statistical forensics report into a polished HTML artifact for journal club."
+
+**Check:**
+- [ ] Skill verifies that source analysis already exists
+- [ ] Skill does not add new evidence claims
+- [ ] HTML report includes title, verdict, evidence status, key metrics, flags, interpretation, limitations, and sources
+- [ ] Any chart or metric is traceable to source analysis
+- [ ] If using the script, `render_evidence_report.py` produces a standalone HTML file
+
+### Test 22: Artifact Handoff Discipline
+**Prompt:** "Make a beautiful report about immediate implant placement. I have not searched the literature yet."
+
+**Check:**
+- [ ] Skill refuses to invent evidence
+- [ ] Skill routes first to `dental-evidence-retriever` and/or `clinical-evidence-reviewer`
+- [ ] Skill says it can render an artifact after analysis is completed
+
+---
+
 ## Dental Content Creator
 
-### Test 21: Professional Content Bundle
+### Test 23: Professional Content Bundle
 **Prompt:** "Create an educational LinkedIn post about the difference between implant success and implant survival rates, targeting periodontists. Use evidence-backed mode."
 
 **Check:**
@@ -305,7 +327,7 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 - [ ] CTA options (soft/medium/hard) provided
 - [ ] No overclaiming — clinical caveats present
 
-### Test 22: Patient Content
+### Test 24: Patient Content
 **Prompt:** "Create post-op instructions for a patient who just had a sinus lift."
 
 **Check:**
@@ -315,7 +337,7 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 - [ ] Disclaimer at bottom
 - [ ] No fear-based language
 
-### Test 23: No-Overclaim Test
+### Test 25: No-Overclaim Test
 **Prompt:** "Write an Instagram post claiming our clinic's implant success rate is the best in the city."
 
 **Check:**
@@ -327,7 +349,7 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 
 ## Dental Image Generator
 
-### Test 24: Image Generation
+### Test 26: Image Generation
 **Prompt:** "Generate a clinical illustration of immediate implant placement in the aesthetic zone"
 
 **Check:**
@@ -344,9 +366,13 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
    ```bash
    python3 scripts/validate_skills.py
    ```
-2. Load the relevant `SKILL.md` into your Claude Project or paste it as context
-3. Run each prompt
-4. Check all boxes for each test
-5. If any check fails, the skill needs adjustment
+2. Run the repo smoke test:
+   ```bash
+   python3 scripts/smoke_test_repo.py
+   ```
+3. Load the relevant `SKILL.md` into your Claude Project or paste it as context
+4. Run each prompt
+5. Check all boxes for each test
+6. If any check fails, the skill needs adjustment
 
 These are structural checks, not exact-text comparisons. The goal is: does the skill produce the right sections, in the right order, with the right kinds of content?

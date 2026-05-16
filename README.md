@@ -16,6 +16,7 @@ Drop these into Claude Desktop, Claude Code, ChatGPT, or any AI that accepts cus
 | [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Body-of-evidence reviews: runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline-vs-consensus distinction, patient selection, "what's unknown" |
 | [**Dental Evidence Retriever**](dental-evidence-retriever/) | Researchers, clinicians | Literature search workflow: PICO → PubMed/Cochrane/guideline-body/ClinicalTrials.gov/PROSPERO strategies → retrieval log. Honest about runtime — no fabricated citations |
 | [**Dental Statistical Forensics**](dental-statistical-forensics/) | Researchers, reviewers | Deep numerical audit: SD/range, CIs, effect sizes, MCID, individual predictability, unit-of-analysis errors, clustering, multiplicity, missing data, model appropriateness, measurement reliability, and claim-to-number discipline |
+| [**Dental Evidence Report Artifact**](dental-evidence-report-artifact/) | Educators, researchers | Turns completed critiques, evidence reviews, retrieval logs, and statistical audits into polished HTML/PDF-ready reports without adding new evidence claims |
 | [**Dental Content Creator**](dental-content-creator/) | Educators & marketers | Audience-aware content with platform adaptations (LinkedIn/X/Instagram), no-overclaim guardrails, evidence-backed mode |
 | [**Dental Image Generator**](dental-image-generator/) | Anyone creating visuals | AI clinical illustrations via Google Gemini — surgical diagrams, patient infographics, branded content |
 
@@ -29,9 +30,14 @@ Question → dental-evidence-retriever  →  body of evidence → clinical-evide
 
 Single paper to appraise → research-critic → dental-statistical-forensics
                             (single-paper credibility)         (numbers and predictability audit)
+
+Completed analysis → dental-evidence-report-artifact
+                     (HTML/PDF-ready report, teaching handout, journal-club artifact)
 ```
 
-`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, and `dental-statistical-forensics` hand off to each other automatically when a question belongs in another layer of the workflow.
+`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, `dental-statistical-forensics`, and `dental-evidence-report-artifact` hand off to each other automatically when a question belongs in another layer of the workflow.
+
+![Iasella statistical forensics report preview](examples/assets/iasella-forensics-preview.svg)
 
 ---
 
@@ -68,6 +74,7 @@ cp -r research-critic ~/.claude/skills/
 cp -r clinical-evidence-reviewer ~/.claude/skills/
 cp -r dental-evidence-retriever ~/.claude/skills/
 cp -r dental-statistical-forensics ~/.claude/skills/
+cp -r dental-evidence-report-artifact ~/.claude/skills/
 cp -r dental-content-creator ~/.claude/skills/
 cp -r dental-image-generator ~/.claude/skills/
 
@@ -77,13 +84,14 @@ cp -r research-critic your-project/.claude/skills/
 cp -r clinical-evidence-reviewer your-project/.claude/skills/
 cp -r dental-evidence-retriever your-project/.claude/skills/
 cp -r dental-statistical-forensics your-project/.claude/skills/
+cp -r dental-evidence-report-artifact your-project/.claude/skills/
 cp -r dental-content-creator your-project/.claude/skills/
 cp -r dental-image-generator your-project/.claude/skills/
 ```
 
-If you only want the scientific-literature workflow for a given project, install just the first four.
+If you only want the scientific-literature workflow for a given project, install the first five.
 
-Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`, `/dental-statistical-forensics`.
+Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`, `/dental-statistical-forensics`, `/dental-evidence-report-artifact`.
 
 ### Option C: ChatGPT / claude.ai / Other AI Platforms
 
@@ -164,6 +172,16 @@ The numbers reviewer. Use it when the mean looks good but the SD, CI, MCID, miss
 - **Dental hierarchy checks** — patient / implant / tooth / site / surface / sinus / scan / histologic-field clustering.
 - **Domain modules** — ridge preservation and esthetic zone, sinus lift, periodontal treatment, implant outcomes, diagnostic accuracy, digital dentistry, and meta-analysis.
 - **Claim-to-number discipline** — separates average treatment effects from individual-patient reliability and flags overinterpretation.
+- **Deterministic helper** — `scripts/stats_forensics_calculator.py` can compute screening CIs, SD/effect ratios, binary effect measures, and diagnostic likelihood ratios without third-party packages.
+
+### Dental Evidence Report Artifact
+
+Turns completed analysis into polished HTML/PDF-ready reports:
+
+- **Separation of analysis and presentation** — formats completed outputs from `research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, or `dental-statistical-forensics`; it does not invent evidence.
+- **Standalone HTML template** — restrained clinical styling, metric cards, severity flags, sections, and source tables.
+- **Renderer script** — `scripts/render_evidence_report.py` converts compact JSON into an HTML report.
+- **Example artifact** — see [`examples/iasella-statistical-forensics-report.html`](examples/iasella-statistical-forensics-report.html) and the source JSON in [`examples/iasella-statistical-forensics-report-data.json`](examples/iasella-statistical-forensics-report-data.json).
 
 ### Dental Content Creator
 
@@ -208,11 +226,17 @@ python3 scripts/validate_skills.py
 
 It checks every `*/SKILL.md` for YAML frontmatter and required metadata.
 
+For the full repo smoke test, including `agents/openai.yaml`, examples, fixtures, and helper scripts:
+
+```bash
+python3 scripts/smoke_test_repo.py
+```
+
 ---
 
 ## Testing
 
-See [TESTING.md](TESTING.md) for manual test prompts and structural checks for each skill. The `fixtures/` folder includes a compact Iasella-style ridge-preservation regression fixture for the high-SD / individual-predictability failure mode.
+See [TESTING.md](TESTING.md) for manual test prompts and structural checks for each skill. The `fixtures/` folder includes compact regression fixtures for high-SD / individual-predictability, split-mouth clustering, QUADAS-3 diagnostic accuracy, AMSTAR 2 native judgment, implant survival-vs-success, and periodontal site-level clustering.
 
 ---
 

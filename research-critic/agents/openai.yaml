@@ -1,0 +1,7 @@
+interface:
+  display_name: "Research Critic"
+  short_description: "Single-paper dental research appraisal"
+  brand_color: "#2563EB"
+  default_prompt: "Use $research-critic to appraise this dental paper with structured extraction, bias assessment, statistics review, and claim-to-evidence mapping."
+policy:
+  allow_implicit_invocation: true

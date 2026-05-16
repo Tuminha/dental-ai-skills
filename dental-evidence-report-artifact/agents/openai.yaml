@@ -1,0 +1,7 @@
+interface:
+  display_name: "Dental Evidence Report Artifact"
+  short_description: "HTML/PDF-ready dental evidence reports"
+  brand_color: "#334155"
+  default_prompt: "Use $dental-evidence-report-artifact to convert this completed dental evidence analysis into a polished HTML report without adding new claims."
+policy:
+  allow_implicit_invocation: true

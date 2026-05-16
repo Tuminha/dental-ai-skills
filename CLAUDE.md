@@ -12,6 +12,7 @@ A collection of AI skills (structured markdown protocols) for dental professiona
 | Clinical Evidence Reviewer | `clinical-evidence-reviewer/` | Body-of-evidence reviews with runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline vs expert-consensus distinction, citation policy with uncertainty labels. |
 | Dental Evidence Retriever | `dental-evidence-retriever/` | Literature-search workflow (PICO → PubMed/Cochrane/guideline-body/registry strategies → retrieval log). Honest about runtime — no fabricated citations. |
 | Dental Statistical Forensics | `dental-statistical-forensics/` | Deep numerical audit (SD/range, CIs, effect sizes, MCID, individual predictability, unit-of-analysis errors, clustering, multiplicity, missing data, measurement reliability, model appropriateness). |
+| Dental Evidence Report Artifact | `dental-evidence-report-artifact/` | Converts completed evidence analysis into HTML/PDF-ready reports without adding new scientific claims. |
 | Dental Content Creator | `dental-content-creator/` | Audience-aware dental content with platform adaptations and no-overclaim guardrails. |
 | Dental Image Generator | `dental-image-generator/` | AI-generated clinical illustrations and patient visuals via Google Gemini. |
 
@@ -24,9 +25,12 @@ Clinical question  →  dental-evidence-retriever  →  clinical-evidence-review
 
 Single paper       →  research-critic  →  dental-statistical-forensics
                        (Study Credibility)    (numbers, SD/CI/MCID, model validity)
+
+Completed analysis → dental-evidence-report-artifact
+                      (HTML/PDF-ready report, teaching artifact)
 ```
 
-`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, and `dental-statistical-forensics` hand off to each other automatically.
+The literature skills hand off to each other automatically when the user crosses from search, to appraisal, to numerical audit, to clinical recommendation, to artifact presentation.
 
 ## Rules for Contributing
 
@@ -40,6 +44,11 @@ Single paper       →  research-critic  →  dental-statistical-forensics
   ```bash
   python3 scripts/validate_skills.py
   ```
-- Run the manual tests in TESTING.md before pushing changes.
+- Run smoke tests before pushing:
+  ```bash
+  python3 scripts/smoke_test_repo.py
+  ```
+- Run the relevant manual tests in TESTING.md before pushing changes.
+- Keep `agents/openai.yaml` metadata aligned with each skill's `SKILL.md`.
 - Prefer minimal diffs and clear commit messages.
 - Methodology updates (case definitions, appraisal tools, guideline-body URLs, GRADE handbook revisions) require updating the "Methodology Review Date" block at the bottom of the affected skill.

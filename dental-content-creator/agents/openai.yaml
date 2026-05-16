@@ -1,0 +1,7 @@
+interface:
+  display_name: "Dental Content Creator"
+  short_description: "Evidence-aware dental content creation"
+  brand_color: "#7C3AED"
+  default_prompt: "Use $dental-content-creator to turn this dental topic into accurate audience-aware content with appropriate clinical caution."
+policy:
+  allow_implicit_invocation: true

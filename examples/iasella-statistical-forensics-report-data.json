@@ -1,0 +1,79 @@
+{
+  "title": "Iasella 2003 Ridge Preservation: Statistical Forensics",
+  "subtitle": "Example artifact showing how dispersion, missing data, and claim discipline alter interpretation of a favorable mean effect.",
+  "report_type": "Statistical Forensics Report",
+  "source_skill": "dental-statistical-forensics",
+  "generated_date": "2026-05-16",
+  "retrieval_status": "User-provided PDF; no live retrieval required for this example",
+  "severity": "moderate",
+  "verdict": "The paper supports a favorable average effect for ridge preservation, but the SDs, ranges, small sample, and missing histology data make claims of predictable esthetic-zone maintenance too strong.",
+  "metrics": [
+    {
+      "label": "Horizontal Change RP",
+      "value": "-1.2 +/- 0.9 mm",
+      "note": "Mean loss with lower dispersion than extraction alone"
+    },
+    {
+      "label": "Horizontal Change EXT",
+      "value": "-2.6 +/- 2.3 mm",
+      "note": "Large SD; individual extraction-site behavior varied widely"
+    },
+    {
+      "label": "Mid-buccal RP",
+      "value": "+1.3 +/- 2.0 mm",
+      "note": "SD exceeds mean gain; range included -2.0 mm loss"
+    },
+    {
+      "label": "Approx CI",
+      "value": "~ -0.1 to 2.9 mm",
+      "note": "Approximate horizontal between-group CI crosses zero"
+    }
+  ],
+  "flags": [
+    {
+      "severity": "moderate",
+      "title": "Dispersion undermines individual predictability",
+      "body": "Favorable means do not guarantee esthetic-zone preservation for an individual patient. The mid-buccal RP SD was larger than the mean gain, and the reported range included clinically relevant loss."
+    },
+    {
+      "severity": "moderate",
+      "title": "Horizontal result is statistically fragile",
+      "body": "The horizontal effect favored ridge preservation, but the reported P value was near the significance boundary and an approximate CI crosses zero."
+    },
+    {
+      "severity": "critical",
+      "title": "Histology missingness likely informative",
+      "body": "Two extraction-site trephine cores could not be obtained because of minimal bone fill, and both were smokers. Excluding these sites may make the histology comparison look better than the full clinical reality."
+    },
+    {
+      "severity": "moderate",
+      "title": "More bone is biologically ambiguous",
+      "body": "Total bone in the ridge-preservation group includes non-vital graft particles. Vital bone and total mineralized tissue should not be interpreted as the same biological outcome."
+    }
+  ],
+  "sections": [
+    {
+      "heading": "Clinical Interpretation",
+      "body": "Ridge preservation appears to reduce average collapse, but it should be interpreted as risk reduction rather than predictable preservation. In esthetic-zone planning, the paper does not remove the need for patient-specific augmentation planning.",
+      "wide": true
+    },
+    {
+      "heading": "Claim Discipline",
+      "body": "A defensible conclusion is: ridge preservation shifted average dimensional outcomes in a favorable direction. A less defensible conclusion is: ridge preservation predictably maintains esthetic-zone anatomy for individual patients."
+    },
+    {
+      "heading": "Limitations",
+      "body": "Small sample, short healing endpoint, no long-term implant outcomes, missing extraction histology data, and limited ability to estimate patient-level failure probabilities."
+    }
+  ],
+  "citations": [
+    {
+      "label": "Iasella et al. 2003",
+      "detail": "User-provided PDF fixture; ridge preservation versus extraction alone."
+    },
+    {
+      "label": "Dental Statistical Forensics",
+      "detail": "Example generated from the repo skill protocol and deterministic artifact template."
+    }
+  ]
+}
