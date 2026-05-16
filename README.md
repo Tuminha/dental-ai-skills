@@ -20,7 +20,7 @@ Drop these into Claude Desktop, Claude Code, ChatGPT, or any AI that accepts cus
 | [**Dental Content Creator**](dental-content-creator/) | Educators & marketers | Audience-aware content with platform adaptations (LinkedIn/X/Instagram), no-overclaim guardrails, evidence-backed mode |
 | [**Dental Image Generator**](dental-image-generator/) | Anyone creating visuals | AI clinical illustrations via Google Gemini — surgical diagrams, patient infographics, branded content |
 
-**Scientific-literature workflow.** The four literature skills are designed to work together:
+**Scientific-literature workflow.** The scientific workflow skills are designed to work together:
 
 ```
 Question → dental-evidence-retriever  →  body of evidence → clinical-evidence-reviewer
@@ -162,6 +162,7 @@ Literature-search workflow for dental clinical questions:
 - **Runtime-honest** — declares whether live retrieval is possible and never fabricates results.
 - **PICO → search strategy** for PubMed (MeSH + free-text), Cochrane CENTRAL, EFP/AAP/EAO/ITI/ADA/NICE/AAOMS guideline repositories, ClinicalTrials.gov, PROSPERO.
 - **Retrieval log** — reproducible Boolean queries, date, result counts, per-source status — that `clinical-evidence-reviewer` can consume directly.
+- **Citation validation helper** — `citation_validator.py` checks DOI/PMID syntax by default; syntax-valid does **not** mean citation-verified. Use `--check-network` or manual verification before publication or clinical teaching.
 - **Hand-off** to `clinical-evidence-reviewer` (for grading), `research-critic` (for single-paper appraisal), and `dental-statistical-forensics` (for numerical audit).
 
 ### Dental Statistical Forensics
