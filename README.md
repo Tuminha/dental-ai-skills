@@ -72,7 +72,11 @@ mkdir -p your-project/.claude/skills
 cp -r research-critic your-project/.claude/skills/
 cp -r clinical-evidence-reviewer your-project/.claude/skills/
 cp -r dental-evidence-retriever your-project/.claude/skills/
+cp -r dental-content-creator your-project/.claude/skills/
+cp -r dental-image-generator your-project/.claude/skills/
 ```
+
+If you only want the scientific-literature workflow for a given project, install just the first three.
 
 Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`.
 
