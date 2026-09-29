@@ -34,6 +34,7 @@ These are manual test prompts to verify each skill produces correct structured o
 - [ ] Output uses **"Study Credibility Rating"** (not "Overall Evidence Quality")
 - [ ] Domain scores provided (/15) with clear note that high credibility ≠ clinical-decision evidence
 - [ ] Funding and relationships are reported as a descriptive block, with no score
+- [ ] One sentence states how funding and relationships changed, or did not change, the risk-of-bias judgments
 - [ ] Fatal flaws section is titled "Fatal Flaws Identified (maximum 5)" — not "Top 5"
 - [ ] No invented flaws to fill the list
 
@@ -82,6 +83,7 @@ These are manual test prompts to verify each skill produces correct structured o
 **Check:**
 - [ ] Phase 0 notes elements as "NOT REPORTED" where abstract lacks detail
 - [ ] Skill acknowledges limitations of abstract-only analysis
+- [ ] Funding and Relationships block says "not in the supplied text", with no severity tag for funding or disclosure reporting
 - [ ] Still produces structured output (not a disclaimer-only response)
 
 ### Test 7: Single-Paper Overreach Prevention
@@ -211,6 +213,7 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 **Check:**
 - [ ] GRADE table has **one row per critical outcome** (survival, marginal bone level change, complications, aesthetics, patient-reported, retreatment, adverse events) — NOT one global GRADE rating
 - [ ] Each row includes: best evidence, effect estimate, certainty (High/Moderate/Low/Very Low), downgrade reasons, critical/important tag
+- [ ] Downgrade reasons cell says how the funding and relationship record changed, or did not change, the indirectness and publication bias judgments, or says "register not run"
 - [ ] Quick Answer references which outcomes drive the conclusion
 - [ ] No single global "GRADE Certainty: Moderate" field at the top
 

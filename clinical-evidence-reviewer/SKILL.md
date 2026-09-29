@@ -13,15 +13,18 @@ For sponsor and author relationships, hand off to `dental-author-disclosures`.
 Keep its dated source register separate from outcome-level certainty judgments.
 A relationship alone does not establish bias or justify an automatic downgrade;
 assess its relevance alongside the methods and sponsor's documented role.
-Permitted route at body-of-evidence level: the register may support a judgment on
-indirectness, when comparator or outcome choices favor the sponsor
+Permitted route at body-of-evidence level: the funding and relationship record
+(papers and register) may support a judgment on indirectness, when comparator or
+outcome choices favor the sponsor
 ([Cochrane Handbook, section 7.8.2](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-2)),
-and on publication bias, when most trials share one funder
-([Cochrane Handbook, section 7.8.4](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-4)).
-GRADE guidelines 5 (PMID: 21802904) advise suspecting publication bias when the
-evidence comes from a number of small studies, most of them commercially funded.
-Write one sentence explaining how the register changed, or did not change, each
-of these judgments.
+and on publication bias, when the evidence comes from a number of small studies,
+most of them commercially funded (GRADE guidelines 5, PMID: 21802904).
+[Cochrane Handbook, section 7.8.4](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-4)
+gives the mechanism: conflicts of interest are one reason negative trials and
+unfavorable results stay unpublished.
+Write one sentence in the Downgrade reasons cell of the GRADE table saying how
+that record changed, or did not change, each of these judgments. If the register
+was not run, write "register not run".
 
 ## Identity
 
@@ -174,7 +177,7 @@ For each outcome listed in PICO, produce one row:
 - **Inconsistency** — heterogeneity of effect across studies (I² > 50%, conflicting direction).
 - **Indirectness** — population, intervention, comparator, or outcome doesn't match the PICO.
 - **Imprecision** — wide CIs, small total n, optimal information size not met.
-- **Publication bias** — funnel plot asymmetry, industry-funded literature, missing negative trials.
+- **Publication bias**: funnel plot asymmetry; a number of small studies, most of them commercially funded; missing negative trials. Funding alone is no reason to downgrade (see the hand-off lines at the top).
 
 **Upgrading criteria for observational evidence** (rare, but explicit): large magnitude of effect, dose–response, plausible confounding would reduce the observed effect.
 
@@ -346,6 +349,7 @@ This skill must be re-reviewed when any of the following changes materially:
 
 **Dated changes:**
 - 2026-09-30: The hand-off lines on sponsor and author relationships now state the permitted route. The `dental-author-disclosures` register may support a judgment on indirectness and on publication bias, with one sentence of explanation and no automatic downgrade. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), sections 7.8.2 and 7.8.4, and the PubMed abstract of GRADE guidelines 5 (PMID: 21802904), both read on 2026-09-30. GRADE guidance and guideline-body positions were not re-reviewed on this date.
+- 2026-09-30 (review follow-up): The publication bias trigger uses the wording of GRADE guidelines 5 (a number of small studies, most of them commercially funded), in the hand-off lines and in the downgrading criteria. Section 7.8.4 of the Cochrane Handbook is cited for the mechanism only. The explanation sentence covers the papers and the register, and goes in the Downgrade reasons cell of the GRADE table. Basis: the same two sources, read on 2026-09-30.
 
 ---
 

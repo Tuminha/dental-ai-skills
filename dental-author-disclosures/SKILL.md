@@ -70,13 +70,15 @@ artifact, not an unsupported addition to its machine-readable rendering schema.
 ## How relationships inform appraisal
 
 The register gives no score. A relationship informs a judgement only through a
-mechanism, and the reviewer writes one sentence saying how the register changed,
-or did not change, each judgement. In `research-critic`: when no protocol or
-analysis plan is available and the investigators have important financial
-relationships, concern about selection of the reported result may be raised
-([Cochrane Handbook 7.8.3](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-3)).
-In `clinical-evidence-reviewer`: the register may support a judgement on indirectness
-and on publication bias. No automatic downgrade in either skill.
+mechanism, and the reviewer writes one sentence saying how the funding and
+relationship record (paper and register) changed, or did not change, the judgements.
+In `research-critic`: when no protocol or analysis plan is available and the
+investigators have important financial relationships, concern about selection of the
+reported result may be raised ([Cochrane Handbook 7.8.3](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-3)).
+In `clinical-evidence-reviewer`: the register may support a judgement on indirectness,
+when comparator or outcome choices favour the sponsor, and on publication bias, when
+the evidence comes from a number of small studies, most of them commercially funded.
+No automatic downgrade in either skill.
 
 ## Source standard
 
