@@ -1,5 +1,18 @@
 # Testing the Dental AI Skills
 
+## Author disclosures and first-use checks
+
+- Run [the synthetic author-disclosure fixture](fixtures/author-disclosures.md) in
+  Claude and Codex. Check every expected flag, especially identity and date ambiguity.
+- Supply only an abstract: the assistant must say disclosures were unavailable, not
+  certify "no conflicts" or invent a search.
+- Supply a verified grant and an unrelated society membership: they must remain
+  separate categories, without automatic credibility deductions.
+- Ask for a report: the register is a narrative appendix; the renderer's supported
+  JSON schema is unchanged.
+- Follow the Journal Club Starter Kit from a fresh installation on both platforms.
+  These are manual behavioral checks; static smoke tests do not prove completion.
+
 These are manual test prompts to verify each skill produces correct structured output. Run each prompt with the skill loaded and check the listed criteria.
 
 ---

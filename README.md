@@ -2,7 +2,9 @@
 
 **Structured AI protocols for dentists, researchers, and dental educators.**
 
-Drop these into Claude Desktop, Claude Code, ChatGPT, or any AI that accepts custom instructions — and get specialist-level output instead of generic responses.
+Structured appraisal workflows for Claude and Codex, with worked examples and explicit evidence limits. Outputs still require clinical review.
+
+**Start here:** [Journal Club Starter Kit](examples/journal-club-starter-kit.md) · [Paper Numbers Check](examples/paper-numbers-check.md) · [Author relationship review](dental-author-disclosures/)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -12,6 +14,7 @@ Drop these into Claude Desktop, Claude Code, ChatGPT, or any AI that accepts cus
 
 | Skill | Who It's For | What It Does |
 |-------|-------------|--------------|
+| [**Dental Author Disclosures**](dental-author-disclosures/) | Researchers & journal clubs | Dated, sourced author relationship register; distinguishes disclosures, external evidence and uncertainty without inferring bias |
 | [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster/crossover/split-mouth, ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
 | [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Body-of-evidence reviews: runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline-vs-consensus distinction, patient selection, "what's unknown" |
 | [**Dental Evidence Retriever**](dental-evidence-retriever/) | Researchers, clinicians | Literature search workflow: PICO → PubMed/Cochrane/guideline-body/ClinicalTrials.gov/PROSPERO strategies → retrieval log. Honest about runtime — no fabricated citations |
@@ -43,14 +46,31 @@ Completed analysis → dental-evidence-report-artifact
 
 ## Installation
 
+### Codex (Desktop or CLI)
+
+Clone this repository, then copy the **whole folder** for each skill you want into
+`~/.agents/skills/` (personal scope) or `<project>/.agents/skills/` (project scope).
+Preserve any customised installation before replacing it. For a first skill:
+
+```bash
+git clone https://github.com/Tuminha/dental-ai-skills.git
+mkdir -p ~/.agents/skills
+cp -R dental-ai-skills/research-critic ~/.agents/skills/
+```
+
+Start a new Codex session and invoke `$research-critic`. Use the same folder-copy
+pattern for `dental-author-disclosures` and the other skills. No API key is needed
+for the instructions or offline number checks; browsing and image generation depend
+on your host's tools. [Official Codex installation guidance](https://learn.chatgpt.com/docs/build-skills).
+
 ### Option A: Claude Desktop (Non-Technical)
 
 1. **Download:** Click the green "Code" button above → "Download ZIP"
 2. **Unzip** the folder anywhere on your computer
-3. **Open Claude Desktop** → Settings (gear icon) → Projects
-4. **Create a new project** called "Dental AI Skills"
-5. **Add the `SKILL.md` files** from the skill folders you want to use
-6. **Start a conversation** inside that project — done!
+3. **Open a Claude conversation or project** and attach the instructions you need
+4. Include the skill's supporting reference files for the task
+5. Ask Claude to follow the named protocol and identify any unavailable resources
+6. Use Claude Code for workflows requiring local scripts or a complete skill folder
 
 > **Tip:** If Claude doesn't follow the protocol, start your prompt with: *"Following the Research Critic protocol, critique this study..."*
 
@@ -89,7 +109,8 @@ cp -r dental-content-creator your-project/.claude/skills/
 cp -r dental-image-generator your-project/.claude/skills/
 ```
 
-If you only want the scientific-literature workflow for a given project, install the first five.
+For the scientific-literature workflow, install the first five plus
+`dental-author-disclosures` using the same whole-folder copy pattern.
 
 Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`, `/dental-statistical-forensics`, `/dental-evidence-report-artifact`.
 
@@ -97,7 +118,7 @@ Claude Code reads the YAML frontmatter and auto-loads each skill when its descri
 
 1. Open the `SKILL.md` file for the skill you want.
 2. Copy the full contents.
-3. In ChatGPT: Settings → Personalization → Custom Instructions → paste.
+3. In ChatGPT: attach the instructions and relevant reference files to a conversation or project; long skills may exceed the custom-instructions field.
 4. In claude.ai: Projects → Custom Instructions → paste.
 5. In other platforms: use whatever "custom instructions" or "system prompt" mechanism is available.
 
