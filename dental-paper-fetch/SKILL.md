@@ -5,7 +5,7 @@ description: >-
   DOI, PMCID or title is at hand: before appraising a paper, reading its methods,
   tables or figures, extracting numbers, or checking its funding and disclosure
   statements. Downloads free, legal open-access PDFs (PubMed Central, OpenAlex
-  locations, Europe PMC, CORE, Semantic Scholar), saves each figure with its caption
+  locations, Europe PMC, CORE, OpenAIRE, Semantic Scholar), saves each figure with its caption
   and license, and files everything by topic. Reports a paywalled paper as
   NO_FREE_COPY with its link. Never uses Sci-Hub or similar sites and never goes
   around a paywall, CAPTCHA or bot check.
@@ -43,9 +43,10 @@ This skill downloads and files papers. It does not appraise them.
 |---|---|---|
 | Python 3.10 or newer | Yes | Standard library only. Nothing to install with pip. |
 | A runtime that runs scripts and reaches the internet | Yes | Claude Code, Codex or a terminal. In a chat-only runtime, ask the user for a PDF they may lawfully share. |
-| poppler (`pdftotext`, `pdfimages`, `pdftoppm`, `pdfinfo`) | Optional | Needed by `import`, and for figures from PDFs that are not in PubMed Central. Package `poppler` in Homebrew, `poppler-utils` in Debian and Ubuntu. |
+| poppler (`pdftotext`, `pdfimages`, `pdftoppm`, `pdfinfo`) | Optional | Needed by `import`, and for figures from PDFs that are not in PubMed Central. Package `poppler` in Homebrew, `poppler-utils` in Debian and Ubuntu. Without it, `get` saves the PDF, takes no figures from it and prints the install command once per run. Each poppler call has a time limit of 120 seconds. |
+| `curl` | Optional | Used once per link when a server fails Python's certificate check, with certificate checking on. `/usr/bin/curl` on macOS completes a chain that leaves out an intermediate certificate. Without curl, those links are reported as `OPEN_MANUALLY` with the certificate reason. |
 | `PAPERS_DIR` | Optional | Folder for everything the tool saves. Default: `./papers` under the current directory. The tool prints one line when it creates the folder. |
-| `CORE_API_KEY` | Optional | API key for CORE, registered at https://core.ac.uk/services/api. Sent in the Authorization header of requests to `api.core.ac.uk`. Without it the tool skips CORE. |
+| `CORE_API_KEY` | Optional | API key for CORE, registered at https://core.ac.uk/services/api. Sent in the Authorization header of requests to `api.core.ac.uk`. Those requests never follow a redirect to another host. Without it the tool skips CORE. |
 | `PAPER_FETCH_EMAIL` | Optional | A contact address. Sent to PubMed (E-utilities `email` parameter), OpenAlex and Crossref (`mailto` parameter). Sent to no other service. Leave it unset to send no address. |
 
 Every request carries one User-Agent: `dental-paper-fetch/1.0 (+https://github.com/Tuminha/dental-ai-skills)`.
@@ -62,6 +63,8 @@ python3 "$F" get --file ids.txt --topic "<Topic>"        # one PMID, DOI, PMCID 
 python3 "$F" search "<query>" [--max 10] [--free] [--min-year 2018] [--journal "J Clin Periodontol"] [--sort relevance|date|cites]
 python3 "$F" search "<query>" --max 5 --download --topic "<Topic>"
 python3 "$F" import <file.pdf> [more ...] --topic "<Topic>"   # a PDF downloaded by hand
+python3 "$F" import --topic "<Topic>"          # lists the PDFs in ~/Downloads from the last day, copies nothing
+python3 "$F" import --topic "<Topic>" --yes    # imports the PDFs on that list
 python3 "$F" topics
 ```
 
@@ -97,11 +100,17 @@ topic folder and answers `EXISTS`.
 |---|---|---|
 | `SAVED` | A PDF was downloaded and filed. The line under it gives the source. | Open page 1 and confirm the title. The tool checks that the file is a PDF. It does not check the content. |
 | `EXISTS` | The PDF is already in a topic folder. | Read it. |
-| `OPEN_MANUALLY` | A free copy is listed, but every link failed for the script: a bot check, a refusal, a page with no PDF, or a network or certificate error. | Give the user the printed links to open in a browser. Do not try to get past the block. |
+| `OPEN_MANUALLY` | A free copy is listed, but every link failed for the script: a bot check, a refusal, a page with no PDF, or a network error. When a server failed the certificate check and the one retry with curl brought nothing, the lines under it say "the server has a certificate problem" instead of "the site blocks download scripts". | Give the user the printed links to open in a browser. Do not try to get past the block. On a certificate problem, tell the user not to continue past a browser security warning. |
 | `NO_FREE_COPY` | No free legal copy was found. Most often the paper is paywalled. | Follow "When a paper does not download". |
 | `NOT_FOUND` | The identifier or title matched no paper. | Check the identifier. |
 
 `import` prints `IMPORTED`, `EXISTS`, `NO_DOI`, `NOT_A_PDF` or `UNREADABLE` for each file.
+With no file names it prints `DRY_RUN` and one `WOULD_IMPORT` or `NO_DOI` line per PDF found.
+
+Each `get` or `search --download` run ends with one count line, for example
+`SAVED 12: PubMed Central 10, OpenAlex 2 | OPEN_MANUALLY 8 | NO_FREE_COPY 20`. `EXISTS` and
+`NOT_FOUND` counts appear when they happened. Report this line to the user. A source with
+0 saves in a large run is worth a look, for example CORE with a key set.
 
 One known case on 2026-09-30: a university repository answered with a one-page PDF that
 said the full text is not available. The tool printed `SAVED`. The size on the line was
@@ -110,7 +119,7 @@ said the full text is not available. The tool printed `SAVED`. The size on the l
 | Exit code | Meaning |
 |---|---|
 | 0 | Every paper was saved or was already there. |
-| 2 | At least one paper was not saved. This is normal: most papers are paywalled. Read the result lines. A wrong command line also exits with 2, with a usage message. |
+| 2 | At least one paper was not saved. This is normal: most papers are paywalled. Read the result lines. A wrong command line also exits with 2, with a usage message. So does `import` with no file names and no `--yes`, after listing the files. |
 | 1 | Error. For example a network failure, a bad answer from PubMed, or `import` without poppler. |
 
 ## When a paper does not download
@@ -129,8 +138,10 @@ paper at a time. The user decides each step.
    The assistant never sends it.
 4. **File it.** Run `import <file.pdf> --topic "<Topic>"` on the PDF the user obtained. It
    reads the DOI inside the PDF, renames and files it, adds BibTeX and extracts figures.
-   Name the files. With no file names, `import` takes every PDF in `~/Downloads` from the
-   last day that has a DOI inside. That can include a personal document that cites a paper.
+   Name the files. With no file names, `import` lists every PDF in `~/Downloads` from the
+   last day with the DOI found inside each, and copies nothing. A personal document that
+   cites a paper has a DOI inside too. Check the list with the user, then name the files,
+   or run the same command with `--yes` to import the whole list.
 
 The tool stops at any bot check. So does the assistant. On a CAPTCHA, a "verify you are
 human" page, a login wall or an upgrade prompt: stop and give the user the link.
@@ -139,8 +150,10 @@ human" page, a login wall or an upgrade prompt: stop and give the user the link.
 
 `get` writes `figures/<PMID n>/` once per paper:
 
-- PubMed Central papers: the journal's own figure files, named `Figure 1 - <caption>.jpg`,
-  with label and caption from the article XML.
+- PubMed Central papers: the journal's own figure files, named `Figure 1 - <caption>.jpg`
+  or `.webp` (records deposited in 2026 mostly hold WebP only), with label and caption from
+  the article XML. The PDF, the figures and the license come from the same version folder
+  of the record: the newest one that holds the PDF.
 - Other PDFs, with poppler: every large picture in the PDF, plus a 150 dpi render of each
   page that holds a figure caption. The page render shows charts drawn as vectors. Labels
   come from captions found on the same page. Check the image before relying on the label.
@@ -158,7 +171,11 @@ before anything is published.
 ## Legal and privacy
 
 - Legal open-access sources only: the PubMed Central open-access bucket on AWS, open-access
-  locations listed by OpenAlex, Europe PMC, CORE and Semantic Scholar.
+  locations listed by OpenAlex, Europe PMC, CORE, OpenAIRE and Semantic Scholar. A download
+  is saved only when it starts with the PDF marker, whatever the source.
+- Certificate checking stays on. When a server fails Python's certificate check, the same
+  link is tried once with the system curl, also with checking on. The tool never switches
+  the check off and never passes `-k` or `--insecure` to curl.
 - Never use Sci-Hub, LibGen, mirrors or proxies. Never add them to the script.
 - No way around a paywall, CAPTCHA, login wall or bot check. The tool prints the link and
   stops.
@@ -174,7 +191,9 @@ before anything is published.
   extra lookup. With `--emails` it prints the addresses found in the PubMed record.
 - `PAPER_FETCH_EMAIL` is the user's own address. It goes to PubMed, OpenAlex and Crossref
   and to no other service.
-- The identifiers and titles you look up are sent to the services that answer them.
+- The identifiers and titles you look up are sent to the services that answer them. When
+  PubMed lists no DOI for a PMID, the PMID goes to OpenAlex, which supplies the DOI and the
+  open-access locations of that record.
 
 ## Sources evaluated on 2026-09-29
 
@@ -203,6 +222,7 @@ Where the downloads came from:
 | CORE | 5 | 0 |
 | Europe PMC | 1 | 0 |
 | Semantic Scholar | 0 | 0 |
+| OpenAIRE | not in the tool then | not in the tool then |
 
 Other sources, tested on the 28 papers the tool missed in the 40 paper run:
 
@@ -210,7 +230,7 @@ Other sources, tested on the 28 papers the tool missed in the 40 paper run:
 |---|---|---|
 | Unpaywall | Same best link as OpenAlex for 10 of 10 papers compared. 0 of 28 misses recovered. | Not added |
 | Crossref full-text links | 0 recovered | Not added |
-| OpenAIRE | 1 of 28 recovered, from a university repository | Candidate for a later version |
+| OpenAIRE | 1 of 28 recovered, from a university repository | Added on 2026-09-30, after CORE. The terms of use allow 60 calls per hour without a token. |
 | Zenodo | 0 recovered. Its one hit was a different article that cites the target. | Not added |
 | HAL, DOAJ, OSF, Figshare, bioRxiv, medRxiv | Nothing new | Not added |
 | BASE | The API needs an approved IP address. It answered "Access denied". | Not added |
@@ -234,8 +254,8 @@ ResearchGate and Academia.edu need a browser: print their links for the user and
 Re-review this skill when any of the following changes materially:
 
 - The layout of the PubMed Central open-access bucket.
-- The OpenAlex, Europe PMC, CORE, Semantic Scholar, Crossref or NCBI E-utilities interfaces
-  or their terms of use.
+- The OpenAlex, Europe PMC, CORE, OpenAIRE, Semantic Scholar, Crossref or NCBI E-utilities
+  interfaces or their terms of use.
 - The license rule behind `reuse_hint`.
 - The measured coverage, after a new test run.
 
@@ -245,6 +265,15 @@ Re-review this skill when any of the following changes materially:
   live on 2026-09-30: the CORE key registration page, the AWS Open Data registry entry for
   the PubMed Central bucket, the BASE API answer and the Internet Archive Scholar bot check.
   Coverage numbers come from the test runs of 2026-09-27 and 2026-09-29.
+- 2026-09-30: Fixes after the audit of 2026-09-29. A server that fails Python's certificate
+  check gets one retry with the system curl, checking on, and is reported as a certificate
+  problem when that fails too. A PMID with no DOI in PubMed gets its DOI and open-access
+  locations from the OpenAlex record of that PMID. The PubMed Central version folder is the
+  newest one that holds the PDF. WebP figures from PubMed Central are saved. OpenAIRE is a
+  source after CORE. The CORE key never follows a redirect to another host. Poppler calls
+  have a time limit. `import` with no file names lists the PDFs and needs `--yes`. One count
+  line per run. Checked live on 2026-09-30: the OpenAIRE Graph API fields and terms of use,
+  the curl manual for `-q`, `--retry` and `--max-time`, and one paper per fix.
 
 ---
 

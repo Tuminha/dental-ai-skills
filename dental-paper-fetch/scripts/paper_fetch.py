@@ -11,9 +11,14 @@ legal open-access copies only, in this order:
   2. open-access locations listed by OpenAlex (publisher PDFs, repositories)
   3. open-access PDF links listed by Europe PMC
   4. repository copies found by CORE (only when CORE_API_KEY is set)
-  5. the open-access PDF link listed by Semantic Scholar
+  5. open-access copies listed by OpenAIRE
+  6. the open-access PDF link listed by Semantic Scholar
+When PubMed lists no DOI for a PMID, the DOI comes from the OpenAlex record of that PMID.
+Every download must start with "%PDF", whatever the source.
 It never uses Sci-Hub, LibGen or similar sites, and it never tries to get past a paywall,
 CAPTCHA or bot check. A free link that refuses the script is printed for a person to open.
+Certificate checking is always on. When a server fails the certificate check in Python, the
+same link is tried once with the system curl, also with checking on.
 
 For a paper that did not download it prints ResearchGate and Academia.edu search links and
 points to the PubMed record for the corresponding author's address. With --emails it prints
@@ -36,8 +41,10 @@ figures in figures/<PMID n>/ with a figures.json that records each figure's labe
 page, the paper's license and whether an image model may use it. The catalog of all papers
 is <PAPERS_DIR>/_index.csv.
 
-Result lines: SAVED, EXISTS, OPEN_MANUALLY (free, but the site blocks scripts: a person must
-open the link), NO_FREE_COPY (no free legal copy found) or NOT_FOUND.
+Result lines: SAVED, EXISTS, OPEN_MANUALLY (free, but the script could not download it: a
+person must open the link), NO_FREE_COPY (no free legal copy found) or NOT_FOUND.
+A run of `get` or `search --download` ends with one count line, for example:
+  SAVED 12: PubMed Central 10, OpenAlex 2 | OPEN_MANUALLY 8 | NO_FREE_COPY 20
 
 Usage:
   paper_fetch.py get 35804491 10.1111/clr.13992 PMC9544523 "a title" --topic "Peri-implantitis"
@@ -46,16 +53,19 @@ Usage:
   paper_fetch.py search "peri-implantitis surgical" --min-year 2018 --sort cites --max 10 --free
   paper_fetch.py search "peri-implantitis surgical" --max 5 --download --topic "Peri-implantitis"
   paper_fetch.py import ~/Downloads/jcpe12345.pdf --topic "Peri-implantitis"
-  paper_fetch.py import --topic "Peri-implantitis"          # PDFs in ~/Downloads from the last day
+  paper_fetch.py import --topic "Peri-implantitis"          # lists PDFs in ~/Downloads from the last day
+  paper_fetch.py import --topic "Peri-implantitis" --yes    # imports the PDFs on that list
   paper_fetch.py topics
 
 Exit codes: 0 all saved or already there, 2 at least one paper not saved (normal, most
-papers are paywalled), 1 error.
+papers are paywalled) or `import` listed files and copied nothing, 1 error.
 Needs Python 3.10 or newer and only the standard library. Figures from PDFs outside PubMed
-Central need poppler (pdfimages, pdftoppm, pdftotext); without it those papers get no figures.
+Central need poppler (pdfimages, pdftoppm, pdftotext); without it those papers get no figures
+and the tool prints once how to install it.
 """
 
 import argparse
+import collections
 import csv
 import difflib
 import functools
@@ -65,6 +75,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -103,12 +114,27 @@ REUSE_NOTES = {
 }
 
 
+class SameHostRedirects(urllib.request.HTTPRedirectHandler):
+    """Refuses a redirect that leaves the host or leaves https. Used for every request that
+    carries an API key, because Python copies the Authorization header to the new address."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        old, new = urllib.parse.urlparse(req.full_url), urllib.parse.urlparse(newurl)
+        if new.scheme != "https" or new.netloc.lower() != old.netloc.lower():
+            raise urllib.error.HTTPError(
+                req.full_url, code, "redirect to another host refused: the request carries an API key",
+                headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def http_get(url, timeout=60, tries=3, accept="*/*", headers=None):
+    keyed = any(h.lower() == "authorization" for h in headers or {})
+    open_url = urllib.request.build_opener(SameHostRedirects).open if keyed else urllib.request.urlopen
     for attempt in range(tries):
         try:
             req = urllib.request.Request(
                 url, headers={"User-Agent": USER_AGENT, "Accept": accept, **(headers or {})})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with open_url(req, timeout=timeout) as resp:
                 return resp.read()
         except urllib.error.HTTPError as e:
             if e.code not in (429, 500, 502, 503, 504) or attempt == tries - 1:
@@ -189,13 +215,35 @@ def pubmed_papers(pmids):
     return papers
 
 
-@functools.lru_cache(maxsize=None)
+OPENALEX = {}  # DOI -> OpenAlex record (or None), so each paper costs one OpenAlex call
+
+
 def openalex_work(doi):
     """OpenAlex record for a DOI, or None when it is unknown or OpenAlex is unreachable."""
+    if doi not in OPENALEX:
+        try:
+            OPENALEX[doi] = get_json(with_mailto(
+                "https://api.openalex.org/works/doi:" + urllib.parse.quote(doi, safe="/()")))
+        except NET_ERRORS:
+            OPENALEX[doi] = None
+    return OPENALEX[doi]
+
+
+def doi_from_openalex(paper):
+    """PubMed lists no DOI for some papers. Ask OpenAlex for the PMID, take the DOI from that
+    record and keep the record, so the open-access lookup that follows asks nothing again."""
+    if not paper or paper["doi"] or not paper["pmid"]:
+        return paper
     try:
-        return get_json(with_mailto("https://api.openalex.org/works/doi:" + urllib.parse.quote(doi, safe="/()")))
+        w = get_json(with_mailto("https://api.openalex.org/works/pmid:" + paper["pmid"]))
     except NET_ERRORS:
-        return None
+        return paper
+    doi = re.sub(r"(?i)^https?://(dx\.)?doi\.org/", "", w.get("doi") or "").lower()
+    same_pmid = re.sub(r"\D", "", (w.get("ids") or {}).get("pmid") or "") == paper["pmid"]
+    if doi and same_pmid and similarity(paper["title"], clean_text(w.get("title"))) > 0.8:
+        paper["doi"] = doi
+        OPENALEX[doi] = w
+    return paper
 
 
 def paper_from_openalex(w, doi):
@@ -239,11 +287,11 @@ def resolve(ident):
     doi_match = re.search(r"10\.\d{4,9}/\S+", s)
     if re.fullmatch(r"\d{1,9}", s):
         papers = pubmed_papers([s])
-        return (papers[0] if papers else None), ""
+        return doi_from_openalex(papers[0] if papers else None), ""
     if re.fullmatch(r"(?i)pmc\d+", s):
         pmids, _ = pubmed_search(f"{s.upper()}[pmcid]", 1)
         papers = pubmed_papers(pmids)
-        return (papers[0] if papers and papers[0]["pmcid"] == s.upper() else None), ""
+        return doi_from_openalex(papers[0] if papers and papers[0]["pmcid"] == s.upper() else None), ""
     if doi_match:
         return resolve_doi(doi_match.group(0).rstrip(".").lower()), ""
     # A title: PubMed first, Crossref for papers outside PubMed; keep the closer match
@@ -257,14 +305,17 @@ def resolve(ident):
         return None, ""
     best = max(candidates, key=lambda p: similarity(s, p["title"]))
     note = "" if similarity(s, best["title"]) > 0.8 else f'CHECK  title search matched "{best["title"]}"'
-    return best, note
+    return doi_from_openalex(best), note
 
 
 # ---------- finding a free legal PDF ----------
 
 @functools.lru_cache(maxsize=None)
 def pmc_latest(pmcid):
-    """(version folder, its keys) for the newest version in the PMC open-access bucket."""
+    """(version folder, its keys) in the PMC open-access bucket: the newest version that holds
+    the article PDF, or the newest version when none holds it. A later version can be an
+    author manuscript with text only. The PDF, the figures and the license all come from
+    the folder chosen here."""
     xml = http_get(f"{PMC_S3}/?list-type=2&prefix={pmcid}.&max-keys=1000")
     versions = {}
     for k in ET.fromstring(xml).iterfind(".//s3:Key", S3_NS):
@@ -273,7 +324,8 @@ def pmc_latest(pmcid):
             versions.setdefault(int(m.group(1)), []).append(k.text)
     if not versions:
         return None, ()
-    v = max(versions)
+    with_pdf = [v for v in versions if f"{pmcid}.{v}/{pmcid}.{v}.pdf" in versions[v]]
+    v = max(with_pdf or versions)
     return f"{pmcid}.{v}", tuple(versions[v])
 
 
@@ -319,6 +371,32 @@ def core_pdfs(paper):
     return [u for u in dict.fromkeys(urls) if u]
 
 
+def openaire_pdfs(paper):
+    """Links to open-access copies listed by OpenAIRE, found by DOI (Graph API, version 3).
+    Only instances marked open access count, and only in a record that carries this DOI.
+    One try and no key: the OpenAIRE terms of use allow 60 calls per hour without a token
+    (checked 2026-09-30). An error answer, for example past that limit, skips OpenAIRE for
+    that paper."""
+    if not paper["doi"]:
+        return []
+    urls = []
+    try:
+        r = get_json("https://api.openaire.eu/graph/v3/research-products?" + urllib.parse.urlencode(
+            {"pid": paper["doi"], "pageSize": 3}), tries=1)
+        for product in r.get("results") or []:
+            if not any(p.get("scheme") == "doi" and (p.get("value") or "").lower() == paper["doi"]
+                       for p in product.get("pids") or []):
+                continue
+            for instance in product.get("instances") or []:
+                if (instance.get("accessRight") or {}).get("label") == "OPEN":
+                    urls += instance.get("urls") or []
+    except NET_ERRORS + (AttributeError, TypeError):
+        return []
+    # A PubMed record page is an abstract, not a copy of the paper
+    return [u for u in dict.fromkeys(urls)
+            if u and urllib.parse.urlparse(u).netloc != "pubmed.ncbi.nlm.nih.gov"]
+
+
 def author_emails(pmid):
     """Author email addresses printed in the PubMed record (usually the corresponding author)."""
     if not pmid:
@@ -351,23 +429,55 @@ def pdf_candidates(paper):
                 yield "open-access copy via Europe PMC", u["url"]
     for url in core_pdfs(paper):
         yield "open-access copy via CORE", url
+    for url in openaire_pdfs(paper):
+        yield "open-access copy via OpenAIRE", url
     if paper["doi"] or paper["pmid"]:
         s2 = semantic_scholar_pdf(paper)
         if s2:
             yield "open-access copy via Semantic Scholar", s2
 
 
-def fetch(url):
-    try:
-        return http_get(url, timeout=120, tries=1)
-    except NET_ERRORS:
+def is_certificate_error(error):
+    """True when the server failed the certificate check, for example an incomplete chain."""
+    return isinstance(error, ssl.SSLCertVerificationError) or \
+        isinstance(getattr(error, "reason", None), ssl.SSLCertVerificationError)
+
+
+def curl_get(url, timeout=120):
+    """One download with the system curl, certificate checking ON. /usr/bin/curl comes first:
+    on macOS that build completes a chain when a server leaves out an intermediate
+    certificate, which Python cannot. -q in first place skips any curl config file, so no
+    setting from there can switch the check off. --retry 1 repeats the transfer once after
+    a timeout or a 5xx answer, because the one publisher seen with this fault takes 30 to
+    60 seconds per PDF. Returns b"" when curl is missing or fails."""
+    curl = shutil.which("curl", path="/usr/bin") or shutil.which("curl")
+    if not curl or not url.lower().startswith("https://"):
         return b""
+    try:
+        done = subprocess.run([curl, "-q", "-sSL", "--retry", "1", "--max-time", str(timeout),
+                               "-A", USER_AGENT, url], capture_output=True, timeout=2 * timeout + 10)
+    except (subprocess.SubprocessError, OSError):
+        return b""
+    return done.stdout if done.returncode == 0 else b""
+
+
+def fetch(url):
+    """Return (bytes, certificate problem). The second value is True when the server failed
+    the certificate check and the one retry with curl brought nothing either."""
+    try:
+        return http_get(url, timeout=120, tries=1), False
+    except NET_ERRORS as error:
+        if not is_certificate_error(error):
+            return b"", False
+    data = curl_get(url)
+    return data, not data
 
 
 def download_pdf(paper):
     """Return (pdf bytes, source label, url, free links that failed).
 
-    Free links fail when the site answers with a bot check or 403. Those are left for a
+    Each failed link is (url, certificate problem). Free links fail when the site answers
+    with a bot check or 403, or when its certificate fails the check. Those are left for a
     person to open in a browser; this script never tries to get past a bot check.
     """
     tried, failed = set(), []
@@ -375,7 +485,7 @@ def download_pdf(paper):
         if url in tried:
             continue
         tried.add(url)
-        data = fetch(url)
+        data, certificate_problem = fetch(url)
         if data and not data.startswith(b"%PDF"):
             # Journal and repository landing pages name their PDF in a standard meta tag
             for tag in re.findall(rb"<meta[^>]*citation_pdf_url[^>]*>", data, re.I)[:1]:
@@ -383,11 +493,24 @@ def download_pdf(paper):
                 pdf_url = m and urllib.parse.urljoin(url, html.unescape(m.group(1).decode()))
                 if pdf_url and pdf_url not in tried:
                     tried.add(pdf_url)
-                    data = fetch(pdf_url)
+                    data, certificate_problem = fetch(pdf_url)
         if data.startswith(b"%PDF"):
             return data, label, url, []
-        failed.append(url)
+        failed.append((url, certificate_problem))
     return None, None, None, failed
+
+
+def open_manually_lines(failed):
+    """The lines printed under OPEN_MANUALLY: the reason, then at most 3 links."""
+    shown = failed[:3]
+    if all(certificate_problem for _, certificate_problem in shown):
+        lines = ["Free to read, but the server has a certificate problem, so the script did not "
+                 "download it.",
+                 "Open in a browser. If the browser shows a security warning, do not continue:"]
+        return lines + [url for url, _ in shown]
+    return ["Free to read, but the site blocks download scripts. Open in a browser:"] + [
+        url + ("  (this server has a certificate problem)" if certificate_problem else "")
+        for url, certificate_problem in shown]
 
 
 def lookup_license(paper):
@@ -414,6 +537,20 @@ FIG_LABEL = re.compile(
     r"(?im)^[ \t]*(?:f[ \t]?i[ \t]?g[ \t]?u[ \t]?r[ \t]?e|fig\.?)[ \t]*([a-z]?\d{1,2}[a-z]?)\b[ \t.:|]*(.*)$")
 
 
+# PubMed Central stores the figures of recent papers as WebP
+PMC_IMAGE_TYPES = (".jpg", ".jpeg", ".png", ".gif", ".tif", ".tiff", ".webp")
+POPPLER_TIMEOUT = 120  # seconds for one poppler call on one PDF
+POPPLER_HELP = ("poppler is not installed, so no figures were taken from this PDF. Install it: "
+                "brew install poppler (macOS), apt install poppler-utils (Debian, Ubuntu)")
+notes_printed = set()
+
+
+def print_once(text):
+    if text not in notes_printed:
+        notes_printed.add(text)
+        print(f"       {text}")
+
+
 def local(tag):
     return tag.rsplit("}", 1)[-1]
 
@@ -425,7 +562,7 @@ def pmc_figures(pmcid, dest):
         return []
     root = ET.fromstring(http_get(f"{PMC_S3}/{folder}/{folder}.xml"))
     images = {k.rsplit("/", 1)[1].rsplit(".", 1)[0]: k for k in keys
-              if k.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".tif", ".tiff"))}
+              if k.lower().endswith(PMC_IMAGE_TYPES)}
     figures = []
     for n, fig in enumerate((e for e in root.iter() if local(e.tag) == "fig"), 1):
         part = lambda name: next((e for e in fig.iter() if local(e.tag) == name), None)
@@ -446,7 +583,7 @@ def pmc_figures(pmcid, dest):
 def pdf_captions(pdf):
     """{page: [(label, caption)]} for figure captions found in the PDF text."""
     pages = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True,
-                           check=True).stdout.split("\f")
+                           check=True, timeout=POPPLER_TIMEOUT).stdout.split("\f")
     captions, seen = {}, set()
     for page, text in enumerate(pages, 1):
         for m in FIG_LABEL.finditer(text):
@@ -468,8 +605,10 @@ def pdf_figures(pdf, dest):
     """Figures from any PDF with poppler: embedded pictures, plus a render of each page with
     a figure caption, because charts are often vector drawings that pdfimages cannot see."""
     if not all(shutil.which(t) for t in ("pdfimages", "pdftoppm", "pdftotext")):
+        print_once(POPPLER_HELP)
         return []
-    run = lambda *cmd: subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+    run = lambda *cmd: subprocess.run(cmd, capture_output=True, text=True, check=True,
+                                      timeout=POPPLER_TIMEOUT).stdout
     captions = pdf_captions(pdf)
     on_page = lambda p: (", ".join(l for l, _ in captions.get(p, [])),
                          " | ".join(c for _, c in captions.get(p, [])))
@@ -530,7 +669,7 @@ def extract_figures(paper, pdf):
     if not figures:
         try:
             figures = pdf_figures(pdf, dest)
-        except (subprocess.CalledProcessError, OSError):
+        except (subprocess.SubprocessError, OSError):  # a poppler error or its time limit
             figures = []
     lic = lookup_license(paper)
     hint = "input_ok_with_credit" if lic in OPEN_LICENSES else "understanding_only"
@@ -645,11 +784,12 @@ def describe(paper):
 # ---------- commands ----------
 
 def get_one(ident, topic, with_figures=True, show_emails=False):
-    """Fetch one paper and print its result line. True when the PDF is on disk."""
+    """Fetch one paper and print its result line. Returns (result, source): the result is
+    SAVED, EXISTS, OPEN_MANUALLY, NO_FREE_COPY or NOT_FOUND; the source is named for SAVED."""
     paper, note = resolve(ident)
     if not paper:
         print(f'NOT_FOUND  "{ident}"')
-        return False
+        return "NOT_FOUND", ""
     if note:
         print(note)
     existing = find_existing(paper)
@@ -660,15 +800,14 @@ def get_one(ident, topic, with_figures=True, show_emails=False):
         append_bibtex(paper, existing.parent)
         if with_figures:
             report_figures(paper, existing)
-        return True
+        return "EXISTS", ""
     data, source, url, failed = download_pdf(paper)
     folder = topic_dir(topic)
     if not data:
         if failed:
-            print(f"OPEN_MANUALLY  {describe(paper)} | {paper['title']}\n"
-                  f"       Free to read, but the site blocks download scripts. Open in a browser:")
-            for link in failed[:3]:
-                print(f"       {link}")
+            print(f"OPEN_MANUALLY  {describe(paper)} | {paper['title']}")
+            for line in open_manually_lines(failed):
+                print(f"       {line}")
         else:
             link = f"https://doi.org/{paper['doi']}" if paper["doi"] else \
                 f"https://pubmed.ncbi.nlm.nih.gov/{paper['pmid']}/"
@@ -687,7 +826,7 @@ def get_one(ident, topic, with_figures=True, show_emails=False):
         print(f"       Then save it in: {folder}/ with \"[{file_tag(paper)}]\" in the file name,\n"
               f"       or download it anywhere and run: "
               f"python3 paper_fetch.py import <file.pdf> --topic \"{folder.name}\"")
-        return False
+        return ("OPEN_MANUALLY" if failed else "NO_FREE_COPY"), ""
     make_folder(folder)
     path = folder / pdf_name(paper)
     path.write_bytes(data)
@@ -696,7 +835,31 @@ def get_one(ident, topic, with_figures=True, show_emails=False):
     print(f"SAVED  {path}\n       {describe(paper)} | {len(data) // 1024} KB | {source}")
     if with_figures:
         report_figures(paper, path)
-    return True
+    # "open-access copy via OpenAlex (host)" -> "OpenAlex"
+    return "SAVED", re.sub(r"^open-access copy via | open-access copy$| \(.*\)$", "", source)
+
+
+def count_line(results):
+    """'SAVED 12: PubMed Central 10, OpenAlex 2 | OPEN_MANUALLY 8 | NO_FREE_COPY 20'.
+    EXISTS and NOT_FOUND are added only when they happened."""
+    counts = collections.Counter(result for result, _ in results)
+    sources = collections.Counter(source for result, source in results if result == "SAVED")
+    saved = f"SAVED {counts['SAVED']}"
+    if sources:
+        saved += ": " + ", ".join(f"{name} {n}" for name, n in sources.most_common())
+    parts = [saved]
+    if counts["EXISTS"]:
+        parts.append(f"EXISTS {counts['EXISTS']}")
+    parts += [f"OPEN_MANUALLY {counts['OPEN_MANUALLY']}", f"NO_FREE_COPY {counts['NO_FREE_COPY']}"]
+    if counts["NOT_FOUND"]:
+        parts.append(f"NOT_FOUND {counts['NOT_FOUND']}")
+    return " | ".join(parts)
+
+
+def finish_run(results):
+    """Print the count line and return the exit code: 0 when every paper is on disk, else 2."""
+    print(count_line(results))
+    return 0 if all(result in ("SAVED", "EXISTS") for result, _ in results) else 2
 
 
 def cmd_get(args):
@@ -706,8 +869,7 @@ def cmd_get(args):
         ids += [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
     if not ids:
         sys.exit("error: give at least one PMID, DOI, PMCID or title, or --file")
-    results = [get_one(i, args.topic, not args.no_figures, args.emails) for i in ids]
-    return 0 if all(results) else 2
+    return finish_run([get_one(i, args.topic, not args.no_figures, args.emails) for i in ids])
 
 
 DOI_IN_TEXT = re.compile(r"\b(10\.\d{4,9}/[^\s\"<>]+)", re.I)
@@ -734,8 +896,21 @@ def cmd_import(args):
         sys.exit("error: import reads the DOI with poppler; install it with: brew install poppler")
     files = [Path(f).expanduser() for f in args.files]
     if not files:
+        downloads = Path.home() / "Downloads"
         cutoff = time.time() - args.days * 86400
-        files = sorted(f for f in (Path.home() / "Downloads").glob("*.pdf") if f.stat().st_mtime >= cutoff)
+        files = sorted(f for f in downloads.glob("*.pdf") if f.stat().st_mtime >= cutoff)
+        if files and not args.yes:
+            # No file was named: show the list and stop. A personal document that cites a
+            # paper has a DOI inside too, and would be filed under that paper.
+            print(f"DRY_RUN  {len(files)} PDF file(s) in {downloads} from the last {args.days:g} "
+                  f"day(s). Nothing was {'moved' if args.move else 'copied'}.")
+            for f in files:
+                doi = doi_in_pdf(f)
+                print(f"       WOULD_IMPORT  {f} | DOI inside: {doi}" if doi else
+                      f"       NO_DOI        {f} | no DOI inside, it would be skipped")
+            print("       Check the list: a personal document that cites a paper has a DOI inside too.\n"
+                  "       Then name the files to import, or run the same command with --yes.")
+            return 2
     ok = True
     for f in files:
         try:
@@ -814,8 +989,7 @@ def cmd_search(args):
     if not args.download:
         return 0
     print()
-    results = [get_one(p["pmid"], args.topic, not args.no_figures, args.emails) for p in papers]
-    return 0 if all(results) else 2
+    return finish_run([get_one(p["pmid"], args.topic, not args.no_figures, args.emails) for p in papers])
 
 
 def cmd_topics(args):
@@ -850,9 +1024,12 @@ def main():
     s.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     s.add_argument("--emails", action="store_true", help=emails_help)
     i = sub.add_parser("import", help="file PDFs you downloaded yourself, found by the DOI inside them")
-    i.add_argument("files", nargs="*", help="PDF files; none = PDFs in ~/Downloads from the last --days")
+    i.add_argument("files", nargs="*", help="PDF files; none = list the PDFs in ~/Downloads from the "
+                                            "last --days and copy nothing, unless --yes is given")
     i.add_argument("--topic", required=True)
     i.add_argument("--days", type=float, default=1)
+    i.add_argument("--yes", action="store_true",
+                   help="with no file names: import the listed PDFs from ~/Downloads")
     i.add_argument("--move", action="store_true", help="move instead of copy")
     i.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     sub.add_parser("topics", help="list topic folders and how many PDFs each holds")
