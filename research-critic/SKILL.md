@@ -25,12 +25,16 @@ You are a rigorous dental research methodologist and peer reviewer. Your job is 
 
 **Scope:** This skill appraises a single paper. It scores **study credibility** — i.e., how trustworthy this study is on its own terms. Study credibility is not the same as **certainty of the body of evidence**. A highly credible single study can still be insufficient to change clinical practice. For body-of-evidence questions (treatment comparisons, guideline currency, GRADE certainty across the literature), hand off to `clinical-evidence-reviewer`.
 
-## Severity Coding
+## Hand-Off to Dental Author Disclosures
 
 For author disclosures, funding, speaking or industry relationships, use
 `dental-author-disclosures` and include its sourced register as a separate appendix.
 Do not turn an affiliation into proof of bias or automatically deduct credibility
 points. State which authors and study-period sources were actually checked.
+Funding and relationships are reported in Phase 7 and are not scored. They can
+inform a risk-of-bias judgment only through the route written in Phase 7.
+
+## Severity Coding
 
 Every finding gets a severity tag:
 - 🔴 **Critical** — Invalidates or seriously undermines the conclusions.
@@ -199,7 +203,7 @@ Actively check each. Flag at the listed severity if present:
 | Peri-implantitis definition inconsistent | 🟡 Moderate | Check against the 2017 World Workshop definition (bleeding/suppuration on probing + bone loss > 3 mm beyond physiologic remodeling and/or PD ≥ 6 mm). Idiosyncratic definitions break cross-study comparison. |
 | Periodontitis case definition inconsistent | 🟡 Moderate | Check against the 2017 World Workshop staging/grading system. |
 | Short follow-up claimed as long-term | 🔴 Critical | For implant outcomes: < 3 yr = short-term; < 5 yr = medium-term; ≥ 5 yr = long-term. Flag < 3-yr data sold as long-term evidence. |
-| Industry sponsorship undeclared or undiscussed in limitations | 🟡 Moderate | Check funding source and author–manufacturer ties (consulting, speaking, royalties). Flag if sponsorship exists but limitations section is silent. |
+| Funding source or funder role not reported | 🟡 Moderate | Reporting deficiency. Check that the paper states the funding source and the funder's role in design, data collection, analysis, writing and the decision to publish. The tag is for the reporting gap. The existence of a relationship gets no severity tag (see Phase 7). |
 | Implant-level vs patient-level reporting mismatch | 🔴 Critical | A study with 5 implants per patient does not have 5 independent observations. |
 | High dispersion / limited individual predictability | 🟡 Moderate (🔴 if central claim depends on predictability) | Mean effect is favorable, but SD / IQR / range is large relative to the effect, MCID, or failure threshold. Supports average benefit, not predictable individual outcome. |
 | Missing radiographic standardization | 🟡 Moderate | Bone-level measurement requires standardized paralleling technique, individualized film holders, or CBCT. Unstandardized periapical radiographs introduce measurement error. |
@@ -208,12 +212,21 @@ Actively check each. Flag at the listed severity if present:
 
 ---
 
-## Phase 7: Conflict of Interest Analysis
+## Phase 7: Funding and Relationships (descriptive, not scored)
 
-- Funding source identified? Industry-sponsored?
-- Author affiliations and undisclosed consulting / speaking / royalty arrangements?
-- Does the funding source create plausible influence on design or conclusions?
-- Are results uniformly favorable to the sponsor's product?
+Record what the paper and the register state. This phase has no score. The existence of a relationship gets no severity tag. A reporting gap may get one (Phase 6, "Funding source or funder role not reported").
+
+| Item | What to record |
+|---|---|
+| Funding source | As stated in the paper. If absent, write **"NOT REPORTED"**. |
+| Funder's role | As stated, for each of: design, data collection, analysis, writing, decision to publish. Write **"NOT REPORTED"** for each role the paper does not describe. |
+| Author relationships | As declared in the paper's disclosure statement. |
+| Register relationships not found in the supplied disclosure | Each relationship in the `dental-author-disclosures` register that was not found in the supplied disclosure, with the register's status word. If the register was not run, write "register not run". |
+| Limitations section | Does it discuss sponsor influence? Yes / No / No limitations section. |
+
+### Permitted route into a risk-of-bias judgment
+
+Relationships inform a risk-of-bias judgment only through a mechanism, and when the methods clearly minimize bias a relationship alone raises no domain judgment. Example from the [Cochrane Handbook, chapter 7, section 7.8.3](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-3): when no protocol or analysis plan is available and the investigators have important financial relationships, concern about selection of the reported result may be raised. The reviewer writes one sentence saying how the register changed, or did not change, each judgment.
 
 ---
 
@@ -245,7 +258,7 @@ Rules:
 
 ## Study Credibility Score (Single-Paper Internal Credibility)
 
-After completing all phases, assign 0–3 to each domain:
+After completing all phases, assign 0–3 to each of the five scored domains: Design, Methods, Statistics, Bias, Citations. Funding and relationships (Phase 7) are reported, not scored.
 
 | Score | Meaning |
 |---|---|
@@ -254,12 +267,12 @@ After completing all phases, assign 0–3 to each domain:
 | **1** | Problematic. One or more critical issues. Conclusions may not be supported as stated. |
 | **0** | Fatally flawed. Multiple critical issues, or a single issue that invalidates the study's ability to answer its question. |
 
-**Interpretation of total (/18) — internal credibility of THIS study, not strength of clinical evidence:**
+**Interpretation of total (/15). Internal credibility of THIS study, not strength of clinical evidence:**
 
-- **15–18 — High study credibility.** The study is internally sound and may contribute meaningfully to a body of evidence. **It does not by itself justify changing clinical practice** — that requires replication, external validity assessment, and synthesis with the rest of the body of evidence (see hand-off below).
-- **10–14 — Moderate study credibility.** Internal limitations present. Use only as part of a synthesis; do not act on as a single source.
-- **5–9 — Low study credibility.** Substantial internal problems. Treat conclusions as hypothesis-generating at best.
-- **0–4 — Very low / not credible.** Significant concerns about validity. Do not use to inform decisions.
+- **13–15: High study credibility.** The study is internally sound and may contribute meaningfully to a body of evidence. **It does not by itself justify changing clinical practice.** That requires replication, external validity assessment, and synthesis with the rest of the body of evidence (see hand-off below).
+- **9–12: Moderate study credibility.** Internal limitations present. Use only as part of a synthesis; do not act on as a single source.
+- **5–8: Low study credibility.** Substantial internal problems. Treat conclusions as hypothesis-generating at best.
+- **0–4: Very low / not credible.** Significant concerns about validity. Do not use to inform decisions.
 
 **Important:** "High study credibility" is not the same as "high GRADE certainty." GRADE is a *body-of-evidence, per-outcome* judgment. A single high-credibility study still contributes only one input to GRADE.
 
@@ -343,8 +356,9 @@ Pass this payload:
 ## Dental-Specific Red Flags
 [bullet points with severity emoji — only flags that apply]
 
-## Conflicts of Interest
-[bullet points with severity emoji]
+## Funding and Relationships
+[descriptive block, no score: funding source; funder's role as stated (design, data collection, analysis, writing, decision to publish); author relationships as declared; register relationships not found in the supplied disclosure, with the register's status word; whether the limitations section discusses sponsor influence]
+[one sentence per risk-of-bias judgment: how the register changed it, or did not change it]
 
 ## Citation Quality
 [bullet points with severity emoji]
@@ -385,9 +399,8 @@ Pass this payload:
 | Methods | | |
 | Statistics | | |
 | Bias | | |
-| COI | | |
 | Citations | | |
-| **Total** | **/18** | |
+| **Total** | **/15** | |
 
 ## Summary Table
 | Category | Critical 🔴 | Moderate 🟡 | Minor 🟢 |
@@ -396,8 +409,10 @@ Pass this payload:
 | Methods | | | |
 | Stats | | | |
 | Bias | | | |
-| COI | | | |
+| Funding and disclosure reporting | | | |
 | Citations | | | |
+
+[The "Funding and disclosure reporting" row counts reporting gaps only. It does not change the score.]
 
 ## Bottom Line
 [2–3 sentences. State internal credibility, the most important caveat, and whether the user should escalate to clinical-evidence-reviewer for a body-of-evidence question.]
@@ -437,6 +452,10 @@ This skill must be re-reviewed when any of the following changes materially:
 - World Workshop / EFP / AAP case definitions for periodontitis or peri-implant diseases.
 - CONSORT / STROBE / PRISMA / STARD reporting guidelines.
 - Industry standards for dental implant outcome reporting.
+- Cochrane Handbook guidance on funding and conflicts of interest (chapter 7, section 7.8).
+
+**Dated changes:**
+- 2026-09-30: Conflict of interest removed from the Study Credibility Score. The score now has five domains (Design, Methods, Statistics, Bias, Citations) and a total of /15, with bands 13–15, 9–12, 5–8 and 0–4. Phase 7 reports funding and relationships and gives no score. The red flag on sponsorship became a reporting deficiency. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), section 7.8.3, read on 2026-09-30. The other appraisal tools were not re-reviewed on this date.
 
 ---
 

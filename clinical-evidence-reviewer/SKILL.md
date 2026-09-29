@@ -13,6 +13,15 @@ For sponsor and author relationships, hand off to `dental-author-disclosures`.
 Keep its dated source register separate from outcome-level certainty judgments.
 A relationship alone does not establish bias or justify an automatic downgrade;
 assess its relevance alongside the methods and sponsor's documented role.
+Permitted route at body-of-evidence level: the register may support a judgment on
+indirectness, when comparator or outcome choices favor the sponsor
+([Cochrane Handbook, section 7.8.2](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-2)),
+and on publication bias, when most trials share one funder
+([Cochrane Handbook, section 7.8.4](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-4)).
+GRADE guidelines 5 (PMID: 21802904) advise suspecting publication bias when the
+evidence comes from a number of small studies, most of them commercially funded.
+Write one sentence explaining how the register changed, or did not change, each
+of these judgments.
 
 ## Identity
 
@@ -334,6 +343,9 @@ This skill must be re-reviewed when any of the following changes materially:
 - Case definitions for periodontitis or peri-implant diseases (World Workshop).
 - Levels-of-evidence frameworks.
 - Available retrieval surfaces (e.g., new search APIs, deprecation of existing ones).
+
+**Dated changes:**
+- 2026-09-30: The hand-off lines on sponsor and author relationships now state the permitted route. The `dental-author-disclosures` register may support a judgment on indirectness and on publication bias, with one sentence of explanation and no automatic downgrade. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), sections 7.8.2 and 7.8.4, and the PubMed abstract of GRADE guidelines 5 (PMID: 21802904), both read on 2026-09-30. GRADE guidance and guideline-body positions were not re-reviewed on this date.
 
 ---
 

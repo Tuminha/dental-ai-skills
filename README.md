@@ -160,7 +160,7 @@ The peer reviewer you wish you had. Feed it a single paper and get:
 - **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, 2017 World Workshop definitions, short follow-up sold as long-term, implant-level vs patient-level mismatch, examiner calibration, radiographic standardization.
 - **Statistical Forensics Triage** — forces SD/range, CI, MCID, individual-predictability, multiplicity, missing-data, and model-appropriateness checks before the paper's numerical claims are accepted.
 - **Claim-to-evidence mapping** — checks every Discussion claim against the actual results.
-- **Study Credibility score** (renamed from "Overall Evidence Quality") — 0–3 per domain, total /18. High credibility ≠ "strong evidence for clinical use"; that's a body-of-evidence question and hands off to `clinical-evidence-reviewer`.
+- **Study Credibility score** (renamed from "Overall Evidence Quality"): 0–3 for each of five domains (Design, Methods, Statistics, Bias, Citations), total /15. Funding and relationships are reported, not scored. High credibility ≠ "strong evidence for clinical use"; that's a body-of-evidence question and hands off to `clinical-evidence-reviewer`.
 - **Actionable output** — fatal flaws (up to 5, not forced), fixable issues, what would be needed to trust the study.
 
 ### Clinical Evidence Reviewer

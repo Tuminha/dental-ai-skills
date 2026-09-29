@@ -10,7 +10,7 @@ description: >-
 # Dental Author Disclosures
 
 **Skill protocol version:** 2026.05.16
-**Methodology Review Date:** 2026-09-27
+**Methodology Review Date:** 2026-09-30 (added "How relationships inform appraisal"; previous review 2026-09-27)
 
 ## Scope
 
@@ -66,6 +66,17 @@ review. Hand off the register under `author_relationships`, with `search_scope`,
 `relationship_dates`, `paper_disclosure`, `source_url`, `supporting_excerpt`, `status`,
 and `relevance_limits` per row. This is an optional narrative appendix for the report
 artifact, not an unsupported addition to its machine-readable rendering schema.
+
+## How relationships inform appraisal
+
+The register gives no score. A relationship informs a judgement only through a
+mechanism, and the reviewer writes one sentence saying how the register changed,
+or did not change, each judgement. In `research-critic`: when no protocol or
+analysis plan is available and the investigators have important financial
+relationships, concern about selection of the reported result may be raised
+([Cochrane Handbook 7.8.3](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-3)).
+In `clinical-evidence-reviewer`: the register may support a judgement on indirectness
+and on publication bias. No automatic downgrade in either skill.
 
 ## Source standard
 

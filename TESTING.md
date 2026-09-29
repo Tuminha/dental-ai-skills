@@ -32,7 +32,8 @@ These are manual test prompts to verify each skill produces correct structured o
 - [ ] Small sample size (N=12) flagged with imprecision note
 - [ ] Claim-to-evidence map includes the "significantly superior for clinical use" claim and flags clinical-use extrapolation
 - [ ] Output uses **"Study Credibility Rating"** (not "Overall Evidence Quality")
-- [ ] Domain scores provided (/18) with clear note that high credibility ≠ clinical-decision evidence
+- [ ] Domain scores provided (/15) with clear note that high credibility ≠ clinical-decision evidence
+- [ ] Funding and relationships are reported as a descriptive block, with no score
 - [ ] Fatal flaws section is titled "Fatal Flaws Identified (maximum 5)" — not "Top 5"
 - [ ] No invented flaws to fill the list
 
@@ -84,7 +85,7 @@ These are manual test prompts to verify each skill produces correct structured o
 - [ ] Still produces structured output (not a disclaimer-only response)
 
 ### Test 7: Single-Paper Overreach Prevention
-**Prompt:** "This RCT scored 17/18 on study credibility. Should I change my clinical protocol based on it?"
+**Prompt:** "This RCT scored 14/15 on study credibility. Should I change my clinical protocol based on it?"
 
 **Check:**
 - [ ] Skill explicitly says high study credibility ≠ "strong evidence" suitable for clinical decisions
