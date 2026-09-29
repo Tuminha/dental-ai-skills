@@ -18,6 +18,7 @@ Structured appraisal workflows for Claude and Codex, with worked examples and ex
 | [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster/crossover/split-mouth, ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
 | [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Body-of-evidence reviews: runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline-vs-consensus distinction, patient selection, "what's unknown" |
 | [**Dental Evidence Retriever**](dental-evidence-retriever/) | Researchers, clinicians | Literature search workflow: PICO → PubMed/Cochrane/guideline-body/ClinicalTrials.gov/PROSPERO strategies → retrieval log. Honest about runtime — no fabricated citations |
+| [**Dental Paper Fetch**](dental-paper-fetch/) | Researchers, clinicians, journal clubs | Gets the free full-text PDF and the figures of a paper by PMID, DOI, PMCID or title, from legal open-access sources only (PubMed Central, OpenAlex, Europe PMC, CORE, Semantic Scholar). Reports a paywalled paper with its link. No way around paywalls or bot checks |
 | [**Dental Statistical Forensics**](dental-statistical-forensics/) | Researchers, reviewers | Deep numerical audit: SD/range, CIs, effect sizes, MCID, individual predictability, unit-of-analysis errors, clustering, multiplicity, missing data, model appropriateness, measurement reliability, and claim-to-number discipline |
 | [**Dental Evidence Report Artifact**](dental-evidence-report-artifact/) | Educators, researchers | Turns completed critiques, evidence reviews, retrieval logs, and statistical audits into polished HTML/PDF-ready reports without adding new evidence claims |
 | [**Dental Content Creator**](dental-content-creator/) | Educators & marketers | Audience-aware content with platform adaptations (LinkedIn/X/Instagram), no-overclaim guardrails, evidence-backed mode |
@@ -26,6 +27,9 @@ Structured appraisal workflows for Claude and Codex, with worked examples and ex
 **Scientific-literature workflow.** The scientific workflow skills are designed to work together:
 
 ```
+PMID, DOI or title → Get the full text: dental-paper-fetch → PDF and figures for the skills below
+                      (free legal copies only; a paywalled paper is reported with its link)
+
 Question → dental-evidence-retriever  →  body of evidence → clinical-evidence-reviewer
             (search strategy + log)                          (GRADE per outcome, guidelines, recommendations)
                                       ↘ numerical disputes → dental-statistical-forensics
@@ -39,6 +43,8 @@ Completed analysis → dental-evidence-report-artifact
 ```
 
 `research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, `dental-statistical-forensics`, and `dental-evidence-report-artifact` hand off to each other automatically when a question belongs in another layer of the workflow.
+
+`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever` and `dental-author-disclosures` read the full text, not the abstract. When the runtime can run scripts, they get the PDF with `dental-paper-fetch` first. Otherwise they ask for a PDF you may lawfully share. Their output states whether the full text, part of it or only the abstract was read.
 
 ![Iasella statistical forensics report preview](examples/assets/iasella-forensics-preview.svg)
 
@@ -95,6 +101,8 @@ cp -r clinical-evidence-reviewer ~/.claude/skills/
 cp -r dental-evidence-retriever ~/.claude/skills/
 cp -r dental-statistical-forensics ~/.claude/skills/
 cp -r dental-evidence-report-artifact ~/.claude/skills/
+cp -r dental-author-disclosures ~/.claude/skills/
+cp -r dental-paper-fetch ~/.claude/skills/
 cp -r dental-content-creator ~/.claude/skills/
 cp -r dental-image-generator ~/.claude/skills/
 
@@ -105,14 +113,16 @@ cp -r clinical-evidence-reviewer your-project/.claude/skills/
 cp -r dental-evidence-retriever your-project/.claude/skills/
 cp -r dental-statistical-forensics your-project/.claude/skills/
 cp -r dental-evidence-report-artifact your-project/.claude/skills/
+cp -r dental-author-disclosures your-project/.claude/skills/
+cp -r dental-paper-fetch your-project/.claude/skills/
 cp -r dental-content-creator your-project/.claude/skills/
 cp -r dental-image-generator your-project/.claude/skills/
 ```
 
-For the scientific-literature workflow, install the first five plus
-`dental-author-disclosures` using the same whole-folder copy pattern.
+For the scientific-literature workflow, install the first seven. `dental-paper-fetch`
+runs a script: it needs Python 3.10 or newer and internet access.
 
-Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`, `/dental-statistical-forensics`, `/dental-evidence-report-artifact`.
+Claude Code reads the YAML frontmatter and auto-loads each skill when its description matches your prompt. You can also invoke any skill directly: `/research-critic`, `/clinical-evidence-reviewer`, `/dental-evidence-retriever`, `/dental-statistical-forensics`, `/dental-evidence-report-artifact`, `/dental-author-disclosures`, `/dental-paper-fetch`.
 
 ### Option C: ChatGPT / claude.ai / Other AI Platforms
 
@@ -155,6 +165,7 @@ python scripts/generate_dental_image.py --prompt "Your description" --style clin
 The peer reviewer you wish you had. Feed it a single paper and get:
 
 - **Mandatory Phase 0 extraction first** — PICO, study classification (including randomization structure), unit of analysis, design essentials checklist — before any critique.
+- **Source text record**: Phase 0 table 0D states whether the full text, part of it or only the abstract was read, where it came from, its license, and whether supplements were read.
 - **Correct bias tool, in its native format** — auto-selects RoB 2 (with cluster, crossover, and split-mouth variants), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence — not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
 - **Unit-of-analysis audit** — patient / implant / tooth / site / surface levels, flags hierarchical-clustering mistakes.
 - **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, 2017 World Workshop definitions, short follow-up sold as long-term, implant-level vs patient-level mismatch, examiner calibration, radiographic standardization.
@@ -168,6 +179,7 @@ The peer reviewer you wish you had. Feed it a single paper and get:
 Evidence-graded decision support, body-of-evidence and outcome-centric:
 
 - **Evidence Retrieval Mode block** — declares runtime (Claude Code / claude.ai / API / unknown), whether live search is possible, what sources were searched. Prevents hallucinated citations in no-network runtimes.
+- **Full text line**: the retrieval block states whether the full text of the key studies was obtained, and from which source.
 - **PICO before synthesis** — pins population, intervention, comparator, outcomes, setting, time horizon.
 - **GRADE certainty per critical outcome** — survival, marginal bone level change, biological complications, aesthetics (PES/WES), patient-reported, retreatment, adverse events. Not a single global rating.
 - **Guideline-vs-consensus distinction** — evidence-based guidelines (EFP S3, ADA EBD) are reported with methodology + strength + certainty as stated by the guideline. Pure expert consensus stays at Level V.
@@ -183,8 +195,20 @@ Literature-search workflow for dental clinical questions:
 - **Runtime-honest** — declares whether live retrieval is possible and never fabricates results.
 - **PICO → search strategy** for PubMed (MeSH + free-text), Cochrane CENTRAL, EFP/AAP/EAO/ITI/ADA/NICE/AAOMS guideline repositories, ClinicalTrials.gov, PROSPERO.
 - **Retrieval log** — reproducible Boolean queries, date, result counts, per-source status — that `clinical-evidence-reviewer` can consume directly.
+- **Full text line**: the Retrieval Mode block states whether the full text of the papers handed off was obtained, and from which source.
 - **Citation validation helper** — `citation_validator.py` checks DOI/PMID syntax by default; syntax-valid does **not** mean citation-verified. Use `--check-network` or manual verification before publication or clinical teaching.
 - **Hand-off** to `clinical-evidence-reviewer` (for grading), `research-critic` (for single-paper appraisal), and `dental-statistical-forensics` (for numerical audit).
+
+### Dental Paper Fetch
+
+Gets the paper, so the appraisal reads the full text:
+
+- **Input**: a PMID, DOI, PMCID or title. `search` lists PubMed results, with citation counts from OpenAlex.
+- **Legal open-access sources only**: the PubMed Central open-access bucket, OpenAlex locations, Europe PMC, CORE (with your own key) and Semantic Scholar. No Sci-Hub or similar sites. No way around a paywall, CAPTCHA or bot check.
+- **Clear result lines**: `SAVED`, `EXISTS`, `OPEN_MANUALLY`, `NO_FREE_COPY`, `NOT_FOUND`. Exit code 2 means at least one paper was not saved, which is normal.
+- **Measured coverage**: about 30 of every 100 periodontology and implant papers download automatically. Most of the rest are paywalled. The skill lists what to do then: your own library access, author-posted copies, a request to the authors that you write and send.
+- **Figures**: each figure is saved with its caption and the paper's license. `reuse_hint` says whether an image model may use a figure as a reference.
+- **Script**: `scripts/paper_fetch.py`, Python 3.10 or newer, standard library only. Files go to `PAPERS_DIR`, default `./papers`.
 
 ### Dental Statistical Forensics
 

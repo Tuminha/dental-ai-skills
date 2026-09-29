@@ -10,7 +10,7 @@ description: >-
 # Dental Author Disclosures
 
 **Skill protocol version:** 2026.05.16
-**Methodology Review Date:** 2026-09-30 (added "How relationships inform appraisal"; previous review 2026-09-27)
+**Methodology Review Date:** 2026-09-30 (added "How relationships inform appraisal" and "Full text first"; previous review 2026-09-27)
 
 ## Scope
 
@@ -18,6 +18,15 @@ Document relationships, not a blacklist or a credibility score. A relationship c
 be relevant to interpretation without proving biased research. Never infer payment,
 commercial sponsorship, or misconduct from a name, conference appearance, membership,
 coauthorship, or missing search result. Do not automatically reduce a paper's score.
+
+## Full text first
+
+The funding and disclosure statements are in the full text. An abstract rarely has them.
+When the runtime can run scripts, get the PDF with `dental-paper-fetch` before building
+the register. Never build the register from the abstract when a free full text exists.
+Otherwise ask the user for a PDF they may lawfully share. State in the search scope
+whether the full text, part of it or only the abstract was read. An author address that
+`dental-paper-fetch` prints is for a full-text request only and never enters the register.
 
 ## Procedure
 

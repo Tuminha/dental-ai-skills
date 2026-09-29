@@ -8,6 +8,7 @@ in Claude Code, Codex, CI, or a minimal local checkout.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -23,6 +24,7 @@ REQUIRED_SKILLS = {
     "dental-evidence-report-artifact",
     "dental-evidence-retriever",
     "dental-image-generator",
+    "dental-paper-fetch",
     "dental-statistical-forensics",
     "research-critic",
 }
@@ -32,8 +34,8 @@ def fail(message: str) -> None:
     raise AssertionError(message)
 
 
-def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=True)
+def run(cmd: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=True, env=env)
 
 
 def skill_dirs() -> list[pathlib.Path]:
@@ -161,6 +163,34 @@ def test_helper_scripts() -> None:
         fail("citation validator rejected syntactically valid examples")
 
 
+def test_paper_fetch_offline() -> None:
+    """Commands that need no network. CI has none, so nothing here may download."""
+    script = "dental-paper-fetch/scripts/paper_fetch.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        papers = pathlib.Path(tmp) / "papers"
+        env = {**os.environ, "PAPERS_DIR": str(papers)}
+        help_text = run([sys.executable, script, "--help"], env=env).stdout
+        for command in ("get", "search", "import", "topics"):
+            if command not in help_text:
+                fail(f"paper_fetch.py --help does not list the command {command}")
+        if "--emails" not in run([sys.executable, script, "get", "--help"], env=env).stdout:
+            fail("paper_fetch.py get --help does not list --emails")
+        empty = run([sys.executable, script, "topics"], env=env).stdout.splitlines()
+        if empty != [str(papers)]:
+            fail(f"paper_fetch.py topics should print only the PAPERS_DIR folder, got {empty!r}")
+        if papers.exists():
+            fail("paper_fetch.py topics must not create the papers folder")
+        topic = papers / "Peri-implantitis"
+        topic.mkdir(parents=True)
+        (topic / "2020 Example - Invented test paper [PMID 1].pdf").write_bytes(b"%PDF-1.4\n")
+        listed = run([sys.executable, script, "topics"], env=env).stdout.splitlines()
+        if len(listed) != 2 or listed[1].split() != ["1", "Peri-implantitis"]:
+            fail(f"paper_fetch.py topics should list one topic with one PDF, got {listed!r}")
+        source = (ROOT / script).read_text(encoding="utf-8")
+        if "Mozilla" in source:
+            fail("paper_fetch.py must not send a browser-style User-Agent")
+
+
 def test_fixtures() -> None:
     fixtures = sorted((ROOT / "fixtures").glob("*.md"))
     if len(fixtures) < 7:
@@ -200,6 +230,7 @@ TESTS = [
     test_statistical_forensics_references_exist,
     test_examples_and_artifact_renderer,
     test_helper_scripts,
+    test_paper_fetch_offline,
     test_fixtures,
     test_iasella_golden_concepts,
 ]

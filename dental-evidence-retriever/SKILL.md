@@ -33,6 +33,7 @@ Before doing anything else, declare what is actually possible in this runtime:
 - Tools available: [WebFetch / WebSearch / browser / MCP-PubMed / none]
 - Live retrieval will be attempted: [yes / no]
 - If no — reason: [no network / no tool / user requested strategy only]
+- Full text obtained: [yes / partial / abstract only] via [source]
 ```
 
 ### Branching rules
@@ -159,6 +160,16 @@ Execute the strategies only if **Step 1 declared live retrieval = yes**. For eac
 
 If live retrieval is **no**, skip this step. State explicitly: `Live retrieval not performed — strategies above are for the user to execute.`
 
+### Full text first
+
+A search result is a title and an abstract. The next skill needs the paper.
+
+- When the runtime can run scripts, get the PDF of each paper you hand off with `dental-paper-fetch` before it is appraised. It uses legal open-access sources only.
+- Never appraise from the abstract when a free full text exists.
+- Otherwise ask the user for a PDF they may lawfully share.
+- Fill the "Full text obtained" line of the Retrieval Mode block. Before any paper is fetched, write "abstract only via search results". When papers differ, say so, for example "partial: 4 of 10 papers saved via dental-paper-fetch, 6 with no free copy".
+- Report each paper that did not download with the result line and link that `dental-paper-fetch` printed. Do not invent a link.
+
 ---
 
 ## STEP 5: Retrieval Log
@@ -266,6 +277,9 @@ This skill must be re-reviewed when any of the following changes materially:
 - URLs / repository structure for EFP, AAP, EAO, ITI, ADA, NICE, AAOMS.
 - ClinicalTrials.gov / PROSPERO interface.
 - Available retrieval tools in Claude Code / claude.ai / API runtimes.
+
+**Dated changes:**
+- 2026-09-30 (full text): New subsection "Full text first" under Step 4 names `dental-paper-fetch` as the way to get the PDF of each paper that is handed off. The Retrieval Mode block has one new line, "Full text obtained: [yes / partial / abstract only] via [source]". Query syntax and repository URLs were not re-reviewed for this change.
 
 ---
 

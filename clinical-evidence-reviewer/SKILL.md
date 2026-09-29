@@ -48,6 +48,7 @@ Output this block at the top of every response, before the disclaimer:
 - Sources searched: [PubMed / Cochrane / EFP / AAP / EAO / ITI / ADA / ClinicalTrials.gov / PROSPERO / other / NONE]
 - Date searched: [YYYY-MM-DD or N/A]
 - Search terms used: [brief Boolean string or N/A]
+- Full text obtained: [yes / partial / abstract only] via [source]
 - Retrieval limitation statement: [one sentence]
 ```
 
@@ -73,6 +74,16 @@ You must **not**:
 - Fabricate DOIs, PMIDs, author/year pairs, or guideline titles.
 - Present recalled citations as verified.
 - Imply a search was performed when it was not.
+
+### Full text first
+
+Grade from the full text of the key studies, not from their abstracts.
+
+- When the runtime can run scripts, get each key PDF with `dental-paper-fetch` before appraising. It uses legal open-access sources only.
+- Never appraise from the abstract when a free full text exists.
+- Otherwise ask the user for a PDF they may lawfully share.
+- Fill the "Full text obtained" line of the retrieval block. When studies differ, say so, for example "partial: full text for 3 of 5 key studies via dental-paper-fetch (PubMed Central), abstract only for 2".
+- A study read as abstract only is named as such in the Evidence Summary Table.
 
 ---
 
@@ -350,6 +361,7 @@ This skill must be re-reviewed when any of the following changes materially:
 **Dated changes:**
 - 2026-09-30: The hand-off lines on sponsor and author relationships now state the permitted route. The `dental-author-disclosures` register may support a judgment on indirectness and on publication bias, with one sentence of explanation and no automatic downgrade. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), sections 7.8.2 and 7.8.4, and the PubMed abstract of GRADE guidelines 5 (PMID: 21802904), both read on 2026-09-30. GRADE guidance and guideline-body positions were not re-reviewed on this date.
 - 2026-09-30 (review follow-up): The publication bias trigger uses the wording of GRADE guidelines 5 (a number of small studies, most of them commercially funded), in the hand-off lines and in the downgrading criteria. Section 7.8.4 of the Cochrane Handbook is cited for the mechanism only. The explanation sentence covers the papers and the register, and goes in the Downgrade reasons cell of the GRADE table. Basis: the same two sources, read on 2026-09-30.
+- 2026-09-30 (full text): New subsection "Full text first" under Step 1 names `dental-paper-fetch` as the way to get each key PDF before appraising. The Evidence Retrieval Mode block has one new line, "Full text obtained: [yes / partial / abstract only] via [source]". GRADE guidance and guideline-body positions were not re-reviewed for this change.
 
 ---
 

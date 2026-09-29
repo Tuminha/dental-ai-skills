@@ -43,6 +43,17 @@ Every finding gets a severity tag:
 
 ---
 
+## Full text first
+
+Appraise the full text, not the abstract.
+
+- When the runtime can run scripts, get the PDF with `dental-paper-fetch` before appraising. It uses legal open-access sources only.
+- Never appraise from the abstract when a free full text exists.
+- Otherwise ask the user for a PDF they may lawfully share.
+- When only an abstract or an excerpt is available, say so and complete the supported parts. Record what was read in table 0D.
+
+---
+
 ## Phase 0: Structured Extraction (Mandatory — Before Any Critique)
 
 Before writing a single evaluative word, extract and present these elements verbatim (or as close to verbatim as the paper allows). If an element is missing, write **"NOT REPORTED"** — that itself becomes a finding in later phases.
@@ -82,6 +93,17 @@ Mark each as **Yes / No / Unclear / N/A**:
 | Intent-to-treat analysis used (where applicable) | |
 | Trial / study registration reported (ClinicalTrials.gov, PROSPERO, etc.) | |
 | Reporting guideline followed (CONSORT, STROBE, PRISMA, STARD, ARRIVE, CRIS) | |
+
+### 0D. Source text
+
+Record what was read. The reader of the critique must be able to tell an appraisal of the full paper from an appraisal of an abstract.
+
+| Element | Extracted Detail |
+|---------|-----------------|
+| **Full text read** | yes / partial / abstract only. For "partial", name the sections that were read. |
+| **Source** | user-provided PDF / `dental-paper-fetch` result and source (for example "SAVED, PubMed Central open-access copy") / publisher page |
+| **License** | As stated by the source, for example CC BY or CC BY-NC-ND. If no license is stated, write "not stated". |
+| **Supplements read** | yes / no. If the paper has no supplements, write "none published". |
 
 **Do not proceed to critique until Phase 0 is complete.**
 
@@ -336,6 +358,8 @@ Pass this payload:
 [completed table, including randomization structure for RCTs]
 ### Design Essentials Checklist
 [completed checklist]
+### Source Text
+[completed table 0D: full text read (yes / partial / abstract only), source, license, supplements read]
 
 ---
 
@@ -465,6 +489,7 @@ This skill must be re-reviewed when any of the following changes materially:
 **Dated changes:**
 - 2026-09-30: Conflict of interest removed from the Study Credibility Score. The score now has five domains (Design, Methods, Statistics, Bias, Citations) and a total of /15, with bands 13–15, 9–12, 5–8 and 0–4. Phase 7 reports funding and relationships and gives no score. The red flag on sponsorship became a reporting deficiency. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), section 7.8.3, read on 2026-09-30. The other appraisal tools were not re-reviewed on this date.
 - 2026-09-30 (review follow-up): Phase 7 limits the permitted route to relationships that are declared in the paper or externally documented, financial, dated within the study period or the journal's stated disclosure period, and tied to a product under study or its maker. The explanation sentence covers the paper and the register. An abstract or excerpt gets "not in the supplied text" and no severity tag. A paper with no disclosure statement counts as a reporting gap. A native tool item on funding or conflict reporting is rated as the tool says. Basis: Cochrane Handbook, version 6.5, chapter 7, sections 7.8.3, 7.8.5 and 7.8.6, and the AMSTAR 2 paper (Shea et al., BMJ 2017;358:j4008, PMID: 28935701), items 10 and 16 and boxes 1 and 2, both read on 2026-09-30.
+- 2026-09-30 (full text): New section "Full text first" names `dental-paper-fetch` as the way to get the PDF before appraising. Phase 0 has a fourth table, "0D. Source text", and the output format has a "Source Text" block under Phase 0. It records whether the full text, part of it or only the abstract was read, the source, the license and whether supplements were read. No appraisal tool was re-reviewed for this change.
 
 ---
 
