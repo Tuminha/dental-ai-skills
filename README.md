@@ -15,7 +15,7 @@ Structured appraisal workflows for Claude and Codex, with worked examples and ex
 | Skill | Who It's For | What It Does |
 |-------|-------------|--------------|
 | [**Dental Author Disclosures**](dental-author-disclosures/) | Researchers & journal clubs | Dated, sourced author relationship register; distinguishes disclosures, external evidence and uncertainty without inferring bias |
-| [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster/crossover/split-mouth, ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
+| [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster and crossover variants; split-mouth via crossover logic plus paired-design checks; ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
 | [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Body-of-evidence reviews: runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline-vs-consensus distinction, patient selection, "what's unknown" |
 | [**Dental Evidence Retriever**](dental-evidence-retriever/) | Researchers, clinicians | Literature search workflow: PICO → PubMed/Cochrane/guideline-body/ClinicalTrials.gov/PROSPERO strategies → retrieval log. Honest about runtime — no fabricated citations |
 | [**Dental Paper Fetch**](dental-paper-fetch/) | Researchers, clinicians, journal clubs | Gets the free full-text PDF and the figures of a paper by PMID, DOI, PMCID or title, from legal open-access sources only (PubMed Central, OpenAlex, Europe PMC, CORE, OpenAIRE, Semantic Scholar). Reports a paywalled paper with its link. No way around paywalls or bot checks |
@@ -44,7 +44,7 @@ Completed analysis → dental-evidence-report-artifact
 
 `research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, `dental-statistical-forensics`, and `dental-evidence-report-artifact` hand off to each other automatically when a question belongs in another layer of the workflow.
 
-`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever` and `dental-author-disclosures` read the full text, not the abstract. When the runtime can run scripts, they get the PDF with `dental-paper-fetch` first. Otherwise they ask for a PDF you may lawfully share. Their output states whether the full text, part of it or only the abstract was read.
+`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, `dental-statistical-forensics` and `dental-author-disclosures` read the full text, not the abstract. When the runtime can run scripts, they get the PDF with `dental-paper-fetch` first. Otherwise they ask for a PDF you may lawfully share. Their output states whether the full text, part of it or only the abstract was read.
 
 ![Iasella statistical forensics report preview](examples/assets/iasella-forensics-preview.svg)
 
@@ -167,7 +167,7 @@ The peer reviewer you wish you had. Feed it a single paper and get:
 
 - **Mandatory Phase 0 extraction first** — PICO, study classification (including randomization structure), unit of analysis, design essentials checklist — before any critique.
 - **Source text record**: Phase 0 table 0D states whether the full text, part of it or only the abstract was read, where it came from, its license, and whether supplements were read.
-- **Correct bias tool, in its native format** — auto-selects RoB 2 (with cluster, crossover, and split-mouth variants), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence — not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
+- **Correct bias tool, in its native format**: auto-selects RoB 2 (incl. cluster and crossover variants; split-mouth via crossover logic plus paired-design checks), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence, not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
 - **Unit-of-analysis audit** — patient / implant / tooth / site / surface levels, flags hierarchical-clustering mistakes.
 - **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, 2017 World Workshop definitions, short follow-up sold as long-term, implant-level vs patient-level mismatch, examiner calibration, radiographic standardization.
 - **Statistical Forensics Triage** — forces SD/range, CI, MCID, individual-predictability, multiplicity, missing-data, and model-appropriateness checks before the paper's numerical claims are accepted.
@@ -207,7 +207,7 @@ Gets the paper, so the appraisal reads the full text:
 - **Input**: a PMID, DOI, PMCID or title. `search` lists PubMed results, with citation counts from OpenAlex.
 - **Legal open-access sources only**: the PubMed Central open-access bucket, OpenAlex locations, Europe PMC, CORE (with your own key), OpenAIRE and Semantic Scholar. No Sci-Hub or similar sites. No way around a paywall, CAPTCHA or bot check.
 - **Clear result lines**: `SAVED`, `EXISTS`, `OPEN_MANUALLY`, `NO_FREE_COPY`, `NOT_FOUND`, then one count line per run with the saves per source. Exit code 2 means at least one paper was not saved, which is normal.
-- **Measured coverage**: about 30 of every 100 periodontology and implant papers download automatically. Most of the rest are paywalled. The skill lists what to do then: your own library access, author-posted copies, a request to the authors that you write and send.
+- **Measured coverage**: between 30 and 48 of every 100 periodontology and implant papers download automatically, in two samples of 100 and 40 papers; a fresh 100-paper run is still to do. Most of the rest are paywalled. The skill lists what to do then: your own library access, author-posted copies, a request to the authors that you write and send.
 - **Figures**: each figure is saved with its caption and the paper's license. `reuse_hint` says whether an image model may use a figure as a reference.
 - **Script**: `scripts/paper_fetch.py`, Python 3.10 or newer, standard library only. Files go to `PAPERS_DIR`, default `./papers`.
 
@@ -228,7 +228,7 @@ The numbers reviewer. Use it when the mean looks good but the SD, CI, MCID, miss
 Turns completed analysis into polished HTML/PDF-ready reports:
 
 - **Separation of analysis and presentation** — formats completed outputs from `research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, or `dental-statistical-forensics`; it does not invent evidence.
-- **Standalone HTML template** — restrained clinical styling, metric cards, severity flags, sections, and source tables.
+- **Standalone HTML template**: restrained clinical styling, metric cards, severity flags, sections, optional per-section tables (used for the author relationship register), and source tables.
 - **Renderer script** — `scripts/render_evidence_report.py` converts compact JSON into an HTML report.
 - **Example artifact** — see [`examples/iasella-statistical-forensics-report.html`](examples/iasella-statistical-forensics-report.html) and the source JSON in [`examples/iasella-statistical-forensics-report-data.json`](examples/iasella-statistical-forensics-report-data.json).
 

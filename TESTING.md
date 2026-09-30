@@ -93,6 +93,8 @@ These are manual test prompts to verify each skill produces correct structured o
 - [ ] Skill recognizes this is a body-of-evidence question
 - [ ] Hands off to `clinical-evidence-reviewer`
 - [ ] Provides the extracted PICO as the hand-off payload
+- [ ] The PICO payload has Setting and Time horizon rows (follow-up band: short-term under 3 years, medium-term 3 to 5 years, long-term 5 years or more)
+- [ ] The hand-off says the reviewer fills the critical/important split of the outcomes
 
 ---
 
@@ -104,6 +106,7 @@ These are manual test prompts to verify each skill produces correct structured o
 Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella2003-ridge-preservation.md), with expected flags in [`fixtures/iasella2003-expected-flags.md`](fixtures/iasella2003-expected-flags.md).
 
 **Check:**
+- [ ] Output opens with the line "Source text: full / partial / abstract only, via [source]"; here it is not "full", because the prompt supplies numbers only
 - [ ] Output acknowledges the favorable average effect
 - [ ] Output flags SD/range as limiting individual-patient/site predictability
 - [ ] Output explicitly weakens or rejects "predictable maintenance" as an overclaim
@@ -274,7 +277,7 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 **Check:**
 - [ ] Retrieval Mode block declared first
 - [ ] Block has the line "Full text obtained: [yes / partial / abstract only] via [source]", filled in
-- [ ] PICO specified
+- [ ] PICO specified, with separate "Publication window" and "Follow-up horizon" lines
 - [ ] PubMed strategy with MeSH terms + free-text `[tiab]` synonyms, combined with AND/OR
 - [ ] Cochrane CENTRAL strategy with `#1`, `#2`, … numbered lines
 - [ ] EFP / AAP / EAO / ITI / ADA URL + search terms each given
@@ -329,8 +332,9 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 **Prompt:** Ask for a report that includes the register.
 
 **Check:**
-- [ ] The register is a narrative appendix
-- [ ] The renderer's supported JSON schema is unchanged
+- [ ] The register goes in one report section, with the optional `table` of `columns` and `rows` that `dental-evidence-report-artifact` renders
+- [ ] By default the section body carries the paper's own disclosure statement and a count of externally documented rows; a named row appears in the table only when the user approved it
+- [ ] The renderer escapes every table heading and cell; `scripts/smoke_test_repo.py` checks this in `test_examples_and_artifact_renderer`
 
 ### AD Test 5: First Use
 **Setup:** A fresh installation in Claude and in Codex.
@@ -341,7 +345,17 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 - [ ] The session runs to the end on both platforms
 - [ ] The assistant states whether the full text was read
 
-AD Tests 1 to 5 are manual behavioral checks. Static smoke tests do not prove completion.
+### AD Test 6: Reviewer's Own Relationships and Sharing
+**Prompt:** "Build the register for this paper and put it in the journal-club report. I am the founder of a dental education site."
+
+**Check:**
+- [ ] Step 0 records the reviewer's own relationships at the top of the register, before any author is searched
+- [ ] The shared report carries the paper's own disclosure statement plus a count of externally documented rows; no author is named in the report without the user's approval of that row
+- [ ] No social media, personal profile or paid people-search source appears in the register
+- [ ] If the journal uses the ICMJE form, the disclosure window is stated as the 36 months before submission
+- [ ] The assistant keeps no copy of the register after the review unless asked
+
+AD Tests 1 to 6 are manual behavioral checks. Static smoke tests do not prove completion.
 
 ---
 
@@ -420,7 +434,7 @@ The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the s
 - [ ] `test_paper_fetch_pmid_without_doi`: a PMID with no DOI in PubMed gets its DOI from one OpenAlex call, `works/pmid:<pmid>`, a record with another title is refused, and an answer of `null` or `[]` leaves the paper without a DOI
 - [ ] `test_paper_fetch_certificate_retry`: a certificate error is retried once with curl, with `-q` first, `--fail`, and never `-k` or `--insecure`; when curl fails the check too (exit 60), `OPEN_MANUALLY` names the certificate problem; a time limit (curl exit 28, or Python) says "did not answer in time"; an HTTP error (exit 22) says the site blocks scripts
 - [ ] `test_paper_fetch_import_needs_yes`: `import` with no file names lists the PDFs and copies nothing without `--yes`
-- [ ] `test_paper_fetch_sources_and_safety`: OpenAIRE links of the same DOI only and string links from a list only, the PDF marker check, the count line, the refused redirect for the CORE key, the poppler time limit (figures and `import`) and the one-time install note
+- [ ] `test_paper_fetch_sources_and_safety`: OpenAIRE links of the same DOI only, never a doi.org or dx.doi.org resolver link (a record with only doi.org and pubmed instances yields no candidate), and string links from a list only, the PDF marker check, the count line, the refused redirect for the CORE key, the poppler time limit (figures and `import`) and the one-time install note
 - [ ] `test_paper_fetch_notice_pdf`: a one-page PDF under 60 KB is a repository notice, never saved; `OPEN_MANUALLY` says so; a two-page PDF is saved as before
 
 ---
@@ -436,6 +450,7 @@ The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the s
 - [ ] HTML report includes title, verdict, evidence status, key metrics, flags, interpretation, limitations, and sources
 - [ ] Any chart or metric is traceable to source analysis
 - [ ] If using the script, `render_evidence_report.py` produces a standalone HTML file
+- [ ] A section with an optional `table` (`columns`, `rows`) renders as an HTML table with every heading and cell escaped
 
 ### Test 22: Artifact Handoff Discipline
 **Prompt:** "Make a beautiful report about immediate implant placement. I have not searched the literature yet."

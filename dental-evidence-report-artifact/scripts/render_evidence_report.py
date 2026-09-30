@@ -56,6 +56,23 @@ def render_flags(flags: list[dict[str, Any]]) -> str:
     return "\n".join(chunks)
 
 
+def render_table(table: Any) -> str:
+    """An optional per-section table, {"columns": [...], "rows": [[...], ...]}. Every cell is escaped."""
+    if not isinstance(table, dict):
+        return ""
+    columns = table.get("columns") or []
+    rows = table.get("rows") or []
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return ""
+    head = "".join(f"<th>{esc(column)}</th>" for column in columns)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>"
+        for row in rows
+        if isinstance(row, list)
+    )
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
 def render_sections(sections: list[dict[str, Any]]) -> str:
     chunks = []
     for section in sections:
@@ -64,6 +81,7 @@ def render_sections(sections: list[dict[str, Any]]) -> str:
             f'<article class="card {width}">'
             f'<h2>{esc(section.get("heading"))}</h2>'
             f'<div class="body-text">{block_text(section.get("body"))}</div>'
+            f'{render_table(section.get("table"))}'
             "</article>"
         )
     return "\n".join(chunks)
