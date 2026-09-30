@@ -106,6 +106,7 @@ These are manual test prompts to verify each skill produces correct structured o
 Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella2003-ridge-preservation.md), with expected flags in [`fixtures/iasella2003-expected-flags.md`](fixtures/iasella2003-expected-flags.md).
 
 **Check:**
+- [ ] Output opens with the line "Source text: full / partial / abstract only, via [source]"; here it is not "full", because the prompt supplies numbers only
 - [ ] Output acknowledges the favorable average effect
 - [ ] Output flags SD/range as limiting individual-patient/site predictability
 - [ ] Output explicitly weakens or rejects "predictable maintenance" as an overclaim

@@ -40,11 +40,24 @@ When arithmetic precision matters, use `scripts/stats_forensics_calculator.py` i
 
 ---
 
+## Full text first
+
+Audit the numbers in the full text, not the abstract.
+
+- When the runtime can run scripts, get the PDF with `dental-paper-fetch` before auditing. It uses legal open-access sources only.
+- Never audit from the abstract when a free full text exists. The tables, the SDs, the n analyzed and the missing-data counts are in the full text.
+- Otherwise ask the user for a PDF they may lawfully share.
+- When only an abstract, an excerpt or a set of pasted numbers is available, say so and complete the supported parts. Record what was read in the Source text line of Step 1.
+
+---
+
 ## Mandatory Workflow
 
 ### Step 1: Data Extraction Status
 
 Before judging, state what numerical data are available and what is missing.
+
+Open with one line: `Source text: full / partial / abstract only, via [source]`. For "partial", name the sections that were read. For numbers pasted by the user, write "abstract only, via user-supplied numbers".
 
 Extract:
 
@@ -172,6 +185,8 @@ Invoke this skill when any of these appear:
 ```markdown
 # Statistical Forensics: [Paper / Question]
 
+Source text: full / partial / abstract only, via [source]
+
 ## Statistical Forensics Verdict
 [2-4 sentences. State whether the numerical results support the authors' conclusion, overstate it, or fail to support it.]
 
@@ -243,6 +258,9 @@ Re-review this skill when any of the following changes materially:
 - ASA or other statistical-interpretation guidance.
 - QUADAS diagnostic accuracy guidance.
 - Dental outcome thresholds, MCIDs, or measurement-error standards.
+
+**Dated changes:**
+- 2026-09-30 (full text): New section "Full text first" names `dental-paper-fetch` as the way to get the PDF before auditing, mirroring `research-critic`. Step 1 and the output template open with the line "Source text: full / partial / abstract only, via [source]". No statistical guidance was re-reviewed for this change.
 
 ---
 

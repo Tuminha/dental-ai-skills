@@ -15,7 +15,7 @@ Structured appraisal workflows for Claude and Codex, with worked examples and ex
 | Skill | Who It's For | What It Does |
 |-------|-------------|--------------|
 | [**Dental Author Disclosures**](dental-author-disclosures/) | Researchers & journal clubs | Dated, sourced author relationship register; distinguishes disclosures, external evidence and uncertainty without inferring bias |
-| [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster/crossover/split-mouth, ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
+| [**Research Critic**](research-critic/) | Researchers & PhD students | Single-paper appraisal: PICO extraction → bias tool selection (RoB 2 incl. cluster and crossover variants; split-mouth via crossover logic plus paired-design checks; ROBINS-I, QUADAS-3, AMSTAR 2, Newcastle-Ottawa, JBI, ARRIVE+SYRCLE, CRIS) → dental red flags → claim-to-evidence map → Study Credibility score |
 | [**Clinical Evidence Reviewer**](clinical-evidence-reviewer/) | Clinicians | Body-of-evidence reviews: runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline-vs-consensus distinction, patient selection, "what's unknown" |
 | [**Dental Evidence Retriever**](dental-evidence-retriever/) | Researchers, clinicians | Literature search workflow: PICO → PubMed/Cochrane/guideline-body/ClinicalTrials.gov/PROSPERO strategies → retrieval log. Honest about runtime — no fabricated citations |
 | [**Dental Paper Fetch**](dental-paper-fetch/) | Researchers, clinicians, journal clubs | Gets the free full-text PDF and the figures of a paper by PMID, DOI, PMCID or title, from legal open-access sources only (PubMed Central, OpenAlex, Europe PMC, CORE, OpenAIRE, Semantic Scholar). Reports a paywalled paper with its link. No way around paywalls or bot checks |
@@ -44,7 +44,7 @@ Completed analysis → dental-evidence-report-artifact
 
 `research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, `dental-statistical-forensics`, and `dental-evidence-report-artifact` hand off to each other automatically when a question belongs in another layer of the workflow.
 
-`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever` and `dental-author-disclosures` read the full text, not the abstract. When the runtime can run scripts, they get the PDF with `dental-paper-fetch` first. Otherwise they ask for a PDF you may lawfully share. Their output states whether the full text, part of it or only the abstract was read.
+`research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, `dental-statistical-forensics` and `dental-author-disclosures` read the full text, not the abstract. When the runtime can run scripts, they get the PDF with `dental-paper-fetch` first. Otherwise they ask for a PDF you may lawfully share. Their output states whether the full text, part of it or only the abstract was read.
 
 ![Iasella statistical forensics report preview](examples/assets/iasella-forensics-preview.svg)
 
@@ -166,7 +166,7 @@ The peer reviewer you wish you had. Feed it a single paper and get:
 
 - **Mandatory Phase 0 extraction first** — PICO, study classification (including randomization structure), unit of analysis, design essentials checklist — before any critique.
 - **Source text record**: Phase 0 table 0D states whether the full text, part of it or only the abstract was read, where it came from, its license, and whether supplements were read.
-- **Correct bias tool, in its native format** — auto-selects RoB 2 (with cluster, crossover, and split-mouth variants), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence — not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
+- **Correct bias tool, in its native format** — auto-selects RoB 2 (incl. cluster and crossover variants; split-mouth via crossover logic plus paired-design checks), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence — not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
 - **Unit-of-analysis audit** — patient / implant / tooth / site / surface levels, flags hierarchical-clustering mistakes.
 - **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, 2017 World Workshop definitions, short follow-up sold as long-term, implant-level vs patient-level mismatch, examiner calibration, radiographic standardization.
 - **Statistical Forensics Triage** — forces SD/range, CI, MCID, individual-predictability, multiplicity, missing-data, and model-appropriateness checks before the paper's numerical claims are accepted.

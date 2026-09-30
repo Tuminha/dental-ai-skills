@@ -27,13 +27,12 @@ Use this skill when an answer depends on something the abstract does not give: m
 full results, tables, figures, flow charts, limitations, funding and disclosure statements,
 supplementary numbers. Do not answer those from the abstract when a free full text exists.
 
-Four skills in this repository have a "Full text first" step that names this skill:
+Five skills in this repository have a "Full text first" step that names this skill:
 
 - `research-critic`, before appraising a single paper.
 - `clinical-evidence-reviewer` and `dental-evidence-retriever`, for each key study.
+- `dental-statistical-forensics`, before auditing the numbers of a paper.
 - `dental-author-disclosures`, to read the paper's own funding and disclosure statements.
-
-Use it as well before `dental-statistical-forensics` audits the numbers of a paper.
 
 This skill downloads and files papers. It does not appraise them.
 

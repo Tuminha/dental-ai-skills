@@ -13,6 +13,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import ssl
 import subprocess
 import sys
@@ -563,6 +564,31 @@ def test_paper_fetch_sources_and_safety() -> None:
             fail(f"without poppler, the install help must print once, got {[t for _, t in calls]!r}")
 
 
+def test_iasella_example_interval() -> None:
+    """The example's CI note states n per group, df and a z-based screen that the calculator reproduces."""
+    data = json.loads((ROOT / "examples" / "iasella-statistical-forensics-report-data.json").read_text(encoding="utf-8"))
+    metrics = {metric.get("label"): metric for metric in data["metrics"]}
+    note = str(metrics.get("Approx CI", {}).get("note", ""))
+    n = re.search(r"n = (\d+) per group", note)
+    screen = re.search(r"z-based screen[^0-9-]*(-?\d+\.\d) to (-?\d+\.\d) mm", note)
+    if not n or not screen or "df = " not in note:
+        fail(f"the Approx CI note must state n per group, df and the z-based screen, got {note!r}")
+    groups = []
+    for label in ("Horizontal Change RP", "Horizontal Change EXT"):
+        value = re.search(r"(-?\d+\.\d) \+/- (\d+\.\d) mm", str(metrics.get(label, {}).get("value", "")))
+        if not value:
+            fail(f"metric {label} must read like '-1.2 +/- 0.9 mm'")
+        groups.append((value.group(1), value.group(2)))
+    result = json.loads(run([
+        sys.executable, "dental-statistical-forensics/scripts/stats_forensics_calculator.py", "continuous",
+        "--mean-a", groups[0][0], "--sd-a", groups[0][1], "--n-a", n.group(1),
+        "--mean-b", groups[1][0], "--sd-b", groups[1][1], "--n-b", n.group(1),
+    ]).stdout)
+    stated = [float(screen.group(1)), float(screen.group(2))]
+    if any(abs(a - b) > 0.1 for a, b in zip(stated, result["ci95"])):
+        fail(f"the z-based screen {stated} does not match the calculator's {result['ci95']} within 0.1 mm")
+
+
 def test_fixtures() -> None:
     fixtures = sorted((ROOT / "fixtures").glob("*.md"))
     if len(fixtures) < 7:
@@ -642,6 +668,7 @@ TESTS = [
     test_paper_fetch_notice_pdf,
     test_fixtures,
     test_iasella_golden_concepts,
+    test_iasella_example_interval,
 ]
 
 
