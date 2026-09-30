@@ -530,6 +530,9 @@ def test_paper_fetch_file_names() -> None:
         old.write_bytes(b"%PDF-1.4\n")
         if pf.find_existing(paper) != old:
             fail("a PDF saved under the older name, without the journal, must still count as EXISTS")
+        (topic / "._2020 Example - Other paper [PMID 804].pdf").write_bytes(b"Finder metadata on exFAT")
+        if pf.find_existing(invented_paper(pmid="804")) is not None:
+            fail("a ._ metadata file that carries the tag must not count as the paper")
 
 
 def test_paper_fetch_index_columns() -> None:

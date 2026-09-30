@@ -815,7 +815,8 @@ def find_existing(paper):
     for d in ROOT.iterdir():
         if d.is_dir():
             for f in d.iterdir():
-                if tag in f.name and f.suffix.lower() == ".pdf":
+                # "._name.pdf" is Finder metadata next to a file on an exFAT drive, not a PDF
+                if tag in f.name and f.suffix.lower() == ".pdf" and not f.name.startswith("."):
                     return f
     return None
 
