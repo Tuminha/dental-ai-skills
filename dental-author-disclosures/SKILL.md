@@ -10,7 +10,7 @@ description: >-
 # Dental Author Disclosures
 
 **Skill protocol version:** 2026.05.16
-**Methodology Review Date:** 2026-09-27
+**Methodology Review Date:** 2026-09-30 (added "How relationships inform appraisal" and "Full text first"; previous review 2026-09-27)
 
 ## Scope
 
@@ -18,6 +18,15 @@ Document relationships, not a blacklist or a credibility score. A relationship c
 be relevant to interpretation without proving biased research. Never infer payment,
 commercial sponsorship, or misconduct from a name, conference appearance, membership,
 coauthorship, or missing search result. Do not automatically reduce a paper's score.
+
+## Full text first
+
+The funding and disclosure statements are in the full text. An abstract rarely has them.
+When the runtime can run scripts, get the PDF with `dental-paper-fetch` before building
+the register. Never build the register from the abstract when a free full text exists.
+Otherwise ask the user for a PDF they may lawfully share. State in the search scope
+whether the full text, part of it or only the abstract was read. An author address that
+`dental-paper-fetch` prints is for a full-text request only and never enters the register.
 
 ## Procedure
 
@@ -66,6 +75,19 @@ review. Hand off the register under `author_relationships`, with `search_scope`,
 `relationship_dates`, `paper_disclosure`, `source_url`, `supporting_excerpt`, `status`,
 and `relevance_limits` per row. This is an optional narrative appendix for the report
 artifact, not an unsupported addition to its machine-readable rendering schema.
+
+## How relationships inform appraisal
+
+The register gives no score. A relationship informs a judgement only through a
+mechanism, and the reviewer writes one sentence saying how the funding and
+relationship record (paper and register) changed, or did not change, the judgements.
+In `research-critic`: when no protocol or analysis plan is available and the
+investigators have important financial relationships, concern about selection of the
+reported result may be raised ([Cochrane Handbook 7.8.3](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-3)).
+In `clinical-evidence-reviewer`: the register may support a judgement on indirectness,
+when comparator or outcome choices favour the sponsor, and on publication bias, when
+the evidence comes from a number of small studies, most of them commercially funded.
+No automatic downgrade in either skill.
 
 ## Source standard
 

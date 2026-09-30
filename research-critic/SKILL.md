@@ -25,17 +25,32 @@ You are a rigorous dental research methodologist and peer reviewer. Your job is 
 
 **Scope:** This skill appraises a single paper. It scores **study credibility** — i.e., how trustworthy this study is on its own terms. Study credibility is not the same as **certainty of the body of evidence**. A highly credible single study can still be insufficient to change clinical practice. For body-of-evidence questions (treatment comparisons, guideline currency, GRADE certainty across the literature), hand off to `clinical-evidence-reviewer`.
 
-## Severity Coding
+## Hand-Off to Dental Author Disclosures
 
 For author disclosures, funding, speaking or industry relationships, use
 `dental-author-disclosures` and include its sourced register as a separate appendix.
 Do not turn an affiliation into proof of bias or automatically deduct credibility
 points. State which authors and study-period sources were actually checked.
+Funding and relationships are reported in Phase 7 and are not scored. They can
+inform a risk-of-bias judgment only through the route written in Phase 7.
+
+## Severity Coding
 
 Every finding gets a severity tag:
 - 🔴 **Critical** — Invalidates or seriously undermines the conclusions.
 - 🟡 **Moderate** — Weakens the evidence but doesn't invalidate it.
 - 🟢 **Minor** — Worth noting but doesn't affect core findings.
+
+---
+
+## Full text first
+
+Appraise the full text, not the abstract.
+
+- When the runtime can run scripts, get the PDF with `dental-paper-fetch` before appraising. It uses legal open-access sources only.
+- Never appraise from the abstract when a free full text exists.
+- Otherwise ask the user for a PDF they may lawfully share.
+- When only an abstract or an excerpt is available, say so and complete the supported parts. Record what was read in table 0D.
 
 ---
 
@@ -78,6 +93,17 @@ Mark each as **Yes / No / Unclear / N/A**:
 | Intent-to-treat analysis used (where applicable) | |
 | Trial / study registration reported (ClinicalTrials.gov, PROSPERO, etc.) | |
 | Reporting guideline followed (CONSORT, STROBE, PRISMA, STARD, ARRIVE, CRIS) | |
+
+### 0D. Source text
+
+Record what was read. The reader of the critique must be able to tell an appraisal of the full paper from an appraisal of an abstract.
+
+| Element | Extracted Detail |
+|---------|-----------------|
+| **Full text read** | yes / partial / abstract only. For "partial", name the sections that were read. |
+| **Source** | user-provided PDF / `dental-paper-fetch` result and source (for example "SAVED, PubMed Central open-access copy") / publisher page |
+| **License** | As stated by the source, for example CC BY or CC BY-NC-ND. If no license is stated, write "not stated". |
+| **Supplements read** | yes / no. If the paper has no supplements, write "none published". |
 
 **Do not proceed to critique until Phase 0 is complete.**
 
@@ -199,7 +225,7 @@ Actively check each. Flag at the listed severity if present:
 | Peri-implantitis definition inconsistent | 🟡 Moderate | Check against the 2017 World Workshop definition (bleeding/suppuration on probing + bone loss > 3 mm beyond physiologic remodeling and/or PD ≥ 6 mm). Idiosyncratic definitions break cross-study comparison. |
 | Periodontitis case definition inconsistent | 🟡 Moderate | Check against the 2017 World Workshop staging/grading system. |
 | Short follow-up claimed as long-term | 🔴 Critical | For implant outcomes: < 3 yr = short-term; < 5 yr = medium-term; ≥ 5 yr = long-term. Flag < 3-yr data sold as long-term evidence. |
-| Industry sponsorship undeclared or undiscussed in limitations | 🟡 Moderate | Check funding source and author–manufacturer ties (consulting, speaking, royalties). Flag if sponsorship exists but limitations section is silent. |
+| Funding source or funder role not reported | 🟡 Moderate | Reporting deficiency. Apply only when the full text was read. Check that the paper states the funding source and the funder's role in design, data collection, analysis, writing and the decision to publish. A paper with no disclosure statement gets the same tag. The tag is for the reporting gap. The existence of a relationship gets no severity tag (see Phase 7). |
 | Implant-level vs patient-level reporting mismatch | 🔴 Critical | A study with 5 implants per patient does not have 5 independent observations. |
 | High dispersion / limited individual predictability | 🟡 Moderate (🔴 if central claim depends on predictability) | Mean effect is favorable, but SD / IQR / range is large relative to the effect, MCID, or failure threshold. Supports average benefit, not predictable individual outcome. |
 | Missing radiographic standardization | 🟡 Moderate | Bone-level measurement requires standardized paralleling technique, individualized film holders, or CBCT. Unstandardized periapical radiographs introduce measurement error. |
@@ -208,12 +234,29 @@ Actively check each. Flag at the listed severity if present:
 
 ---
 
-## Phase 7: Conflict of Interest Analysis
+## Phase 7: Funding and Relationships (descriptive, not scored)
 
-- Funding source identified? Industry-sponsored?
-- Author affiliations and undisclosed consulting / speaking / royalty arrangements?
-- Does the funding source create plausible influence on design or conclusions?
-- Are results uniformly favorable to the sponsor's product?
+Record what the paper and the register state. This phase has no score. The existence of a relationship gets no severity tag. Two reporting gaps may get one, both under the Phase 6 flag "Funding source or funder role not reported": funding source or funder role not reported, and no disclosure statement in the paper.
+
+Where the appraisal tool has its own item on funding or conflict reporting (for example AMSTAR 2 items 10 and 16), rate that item as the tool says. It is a reporting item, and it is the only way funding reporting reaches the Bias score.
+
+| Item | What to record |
+|---|---|
+| Funding source | As stated in the paper. If absent, write **"NOT REPORTED"**. |
+| Funder's role | As stated, for each of: design, data collection, analysis, writing, decision to publish. Write **"NOT REPORTED"** for each role the paper does not describe. If the paper states it had no external funding, write "not applicable" and give no severity tag. |
+| Author relationships | As declared in the paper's disclosure statement. If the paper has no disclosure statement, write **"NOT REPORTED"**. |
+| Register relationships not found in the supplied disclosure | Each relationship in the `dental-author-disclosures` register that was not found in the supplied disclosure, with the register's status word. List confirmed rows and unresolved leads separately. If the register was not run, write "register not run". |
+| Limitations section | Does it discuss sponsor influence? Yes / No / No limitations section. |
+
+If only an abstract or excerpt was supplied, write "not in the supplied text" in place of "NOT REPORTED" and give no severity tag. An abstract rarely carries the funding or disclosure statement.
+
+### Permitted route into a risk-of-bias judgment
+
+Relationships inform a risk-of-bias judgment only through a mechanism. When the methods clearly minimize bias, a relationship alone does not make any domain judgment worse. Example from the [Cochrane Handbook, chapter 7, section 7.8.3](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-07#section-7-8-3): when no protocol or analysis plan is available and the investigators have important financial relationships, concern about selection of the reported result may be raised.
+
+Only a relationship that is declared in the paper or externally documented, financial, dated within the study period or the journal's stated disclosure period, and tied to a product under study or its maker can enter this route. Rows marked identity unresolved or relationship unclear, and rows with unknown paid status, cannot.
+
+The reviewer writes one sentence saying how the funding and relationship record (paper and register) changed, or did not change, the risk-of-bias judgments, and names each domain it changed.
 
 ---
 
@@ -245,7 +288,7 @@ Rules:
 
 ## Study Credibility Score (Single-Paper Internal Credibility)
 
-After completing all phases, assign 0–3 to each domain:
+After completing all phases, assign 0–3 to each of the five scored domains: Design, Methods, Statistics, Bias, Citations. Funding and relationships (Phase 7) are reported, not scored.
 
 | Score | Meaning |
 |---|---|
@@ -254,12 +297,12 @@ After completing all phases, assign 0–3 to each domain:
 | **1** | Problematic. One or more critical issues. Conclusions may not be supported as stated. |
 | **0** | Fatally flawed. Multiple critical issues, or a single issue that invalidates the study's ability to answer its question. |
 
-**Interpretation of total (/18) — internal credibility of THIS study, not strength of clinical evidence:**
+**Interpretation of total (/15). Internal credibility of THIS study, not strength of clinical evidence:**
 
-- **15–18 — High study credibility.** The study is internally sound and may contribute meaningfully to a body of evidence. **It does not by itself justify changing clinical practice** — that requires replication, external validity assessment, and synthesis with the rest of the body of evidence (see hand-off below).
-- **10–14 — Moderate study credibility.** Internal limitations present. Use only as part of a synthesis; do not act on as a single source.
-- **5–9 — Low study credibility.** Substantial internal problems. Treat conclusions as hypothesis-generating at best.
-- **0–4 — Very low / not credible.** Significant concerns about validity. Do not use to inform decisions.
+- **13–15: High study credibility.** The study is internally sound and may contribute meaningfully to a body of evidence. **It does not by itself justify changing clinical practice.** That requires replication, external validity assessment, and synthesis with the rest of the body of evidence (see hand-off below).
+- **9–12: Moderate study credibility.** Internal limitations present. Use only as part of a synthesis; do not act on as a single source.
+- **5–8: Low study credibility.** Substantial internal problems. Treat conclusions as hypothesis-generating at best.
+- **0–4: Very low / not credible.** Significant concerns about validity. Do not use to inform decisions.
 
 **Important:** "High study credibility" is not the same as "high GRADE certainty." GRADE is a *body-of-evidence, per-outcome* judgment. A single high-credibility study still contributes only one input to GRADE.
 
@@ -315,6 +358,8 @@ Pass this payload:
 [completed table, including randomization structure for RCTs]
 ### Design Essentials Checklist
 [completed checklist]
+### Source Text
+[completed table 0D: full text read (yes / partial / abstract only), source, license, supplements read]
 
 ---
 
@@ -343,8 +388,9 @@ Pass this payload:
 ## Dental-Specific Red Flags
 [bullet points with severity emoji — only flags that apply]
 
-## Conflicts of Interest
-[bullet points with severity emoji]
+## Funding and Relationships
+[descriptive block, no score: funding source; funder's role as stated (design, data collection, analysis, writing, decision to publish); author relationships as declared; register relationships not found in the supplied disclosure, with the register's status word, confirmed rows and unresolved leads listed separately; whether the limitations section discusses sponsor influence]
+[one sentence: how the funding and relationship record (paper and register) changed, or did not change, the risk-of-bias judgments; name each domain it changed]
 
 ## Citation Quality
 [bullet points with severity emoji]
@@ -385,9 +431,8 @@ Pass this payload:
 | Methods | | |
 | Statistics | | |
 | Bias | | |
-| COI | | |
 | Citations | | |
-| **Total** | **/18** | |
+| **Total** | **/15** | |
 
 ## Summary Table
 | Category | Critical 🔴 | Moderate 🟡 | Minor 🟢 |
@@ -396,8 +441,10 @@ Pass this payload:
 | Methods | | | |
 | Stats | | | |
 | Bias | | | |
-| COI | | | |
+| Funding and disclosure reporting | | | |
 | Citations | | | |
+
+[The "Funding and disclosure reporting" row counts two things only: funding source or funder role not reported, and no disclosure statement in the paper. A register row not found in the supplied disclosure is not counted. The row does not change the score. Funding reporting reaches the score only through a native tool item, such as AMSTAR 2 items 10 and 16.]
 
 ## Bottom Line
 [2–3 sentences. State internal credibility, the most important caveat, and whether the user should escalate to clinical-evidence-reviewer for a body-of-evidence question.]
@@ -437,6 +484,12 @@ This skill must be re-reviewed when any of the following changes materially:
 - World Workshop / EFP / AAP case definitions for periodontitis or peri-implant diseases.
 - CONSORT / STROBE / PRISMA / STARD reporting guidelines.
 - Industry standards for dental implant outcome reporting.
+- Cochrane Handbook guidance on funding and conflicts of interest (chapter 7, section 7.8).
+
+**Dated changes:**
+- 2026-09-30: Conflict of interest removed from the Study Credibility Score. The score now has five domains (Design, Methods, Statistics, Bias, Citations) and a total of /15, with bands 13–15, 9–12, 5–8 and 0–4. Phase 7 reports funding and relationships and gives no score. The red flag on sponsorship became a reporting deficiency. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), section 7.8.3, read on 2026-09-30. The other appraisal tools were not re-reviewed on this date.
+- 2026-09-30 (review follow-up): Phase 7 limits the permitted route to relationships that are declared in the paper or externally documented, financial, dated within the study period or the journal's stated disclosure period, and tied to a product under study or its maker. The explanation sentence covers the paper and the register. An abstract or excerpt gets "not in the supplied text" and no severity tag. A paper with no disclosure statement counts as a reporting gap. A native tool item on funding or conflict reporting is rated as the tool says. Basis: Cochrane Handbook, version 6.5, chapter 7, sections 7.8.3, 7.8.5 and 7.8.6, and the AMSTAR 2 paper (Shea et al., BMJ 2017;358:j4008, PMID: 28935701), items 10 and 16 and boxes 1 and 2, both read on 2026-09-30.
+- 2026-09-30 (full text): New section "Full text first" names `dental-paper-fetch` as the way to get the PDF before appraising. Phase 0 has a fourth table, "0D. Source text", and the output format has a "Source Text" block under Phase 0. It records whether the full text, part of it or only the abstract was read, the source, the license and whether supplements were read. No appraisal tool was re-reviewed for this change.
 
 ---
 

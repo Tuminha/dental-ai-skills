@@ -6,16 +6,23 @@ Remove patient identifiers. This is an appraisal workflow, not a treatment recom
 ## Run your first session
 
 1. Install `research-critic`, `dental-statistical-forensics`,
-   `dental-author-disclosures`, and `dental-evidence-report-artifact` using the README.
-2. Provide the paper and supplements. With only an abstract, mark missing methods
+   `dental-author-disclosures`, `dental-paper-fetch`, and
+   `dental-evidence-report-artifact` using the README.
+2. Get the PDF. In Claude Code or Codex, give the PMID or DOI and ask for
+   `dental-paper-fetch`: it downloads the paper when a free legal copy exists. When it
+   prints `NO_FREE_COPY` or `OPEN_MANUALLY`, use your own library access or the printed
+   link. In a chat without scripts, upload a PDF you may lawfully share.
+3. Provide the paper and supplements. With only an abstract, mark missing methods
    "not reported in the supplied abstract", not a confirmed study defect.
-3. Paste the prompt below. Codex uses `$skill-name`; Claude Code uses `/skill-name`.
+4. Paste the prompt below. Codex uses `$skill-name`; Claude Code uses `/skill-name`.
    In Claude's document chat, name the protocol in ordinary language.
 
 > Use research-critic to extract the PICO, study design, unit of analysis and main
 > claim before judging this paper. Select the appropriate native bias tool. Use
 > dental-statistical-forensics for the main numerical claim and
 > dental-author-disclosures for disclosed and verified public author relationships.
+> State at the top whether you read the full text, part of it or only the abstract,
+> and where the text came from.
 > End with three journal-club questions, unresolved evidence, and a one-page summary.
 > Do not recommend changing practice from one paper. If a tool or document is missing,
 > state the limitation and complete the supported parts.
