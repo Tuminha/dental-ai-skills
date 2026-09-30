@@ -22,7 +22,7 @@ Structured appraisal workflows for Claude and Codex, with worked examples and ex
 | [**Dental Statistical Forensics**](dental-statistical-forensics/) | Researchers, reviewers | Deep numerical audit: SD/range, CIs, effect sizes, MCID, individual predictability, unit-of-analysis errors, clustering, multiplicity, missing data, model appropriateness, measurement reliability, and claim-to-number discipline |
 | [**Dental Evidence Report Artifact**](dental-evidence-report-artifact/) | Educators, researchers | Turns completed critiques, evidence reviews, retrieval logs, and statistical audits into polished HTML/PDF-ready reports without adding new evidence claims |
 | [**Dental Content Creator**](dental-content-creator/) | Educators & marketers | Audience-aware content with platform adaptations (LinkedIn/X/Instagram), no-overclaim guardrails, evidence-backed mode |
-| [**Dental Image Generator**](dental-image-generator/) | Anyone creating visuals | AI clinical illustrations via Google Gemini — surgical diagrams, patient infographics, branded content |
+| [**Dental Image Generator**](dental-image-generator/) | Anyone creating visuals | AI clinical illustrations via OpenAI's Images API (paid, `gpt-image-2.5-sunburst` by default): surgical diagrams, patient infographics, branded content |
 
 **Scientific-literature workflow.** The scientific workflow skills are designed to work together:
 
@@ -147,14 +147,15 @@ For skills with supporting resources, copy or upload the **full skill folder**, 
 
 The skills are designed so the *body* is the contract. YAML frontmatter improves Claude Code ergonomics but is not required for the skill to work elsewhere.
 
-### Option D: Image Generator (Requires Python)
+### Option D: Image Generator (Requires Python and an OpenAI API key)
 
 ```bash
 cd dental-image-generator
-pip install -r requirements.txt
-export GEMINI_API_KEY="your-key-from-aistudio.google.com/apikey"
-python scripts/generate_dental_image.py --prompt "Your description" --style clinical --output image.png
+export OPENAI_API_KEY="your-key-from-platform.openai.com/api-keys"
+python3 scripts/generate_dental_image.py --prompt "Your description" --style clinical --output image.png
 ```
+
+The script uses only the Python standard library (Python 3.10 or newer), so there is nothing to install. The API is paid: OpenAI bills each image by output tokens. `--dry-run` prints the request without calling the API, and `--help` works without a key.
 
 ---
 
@@ -245,9 +246,9 @@ Content that sounds professional, not AI-generated:
 AI-generated clinical visuals:
 
 - **Three style presets** — clinical (textbook), patient-friendly (calming), infographic (modern)
-- **Brand extraction** — analyzes your clinic's logo/brochure and matches the style
+- **Brand reference**: send your clinic's logo or brochure as an input image and the model matches its colours and style
 - **Prompt cookbook** — tested prompts for surgical diagrams, patient handouts, social media graphics
-- **Google Gemini** — free tier (15 req/min), no design skills needed
+- **OpenAI Images API** (`gpt-image-2.5-sunburst` by default): paid per image, standard-library script, no design skills needed
 
 ---
 

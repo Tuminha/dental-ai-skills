@@ -16,7 +16,7 @@ A collection of AI skills (structured markdown protocols) for dental professiona
 | Dental Statistical Forensics | `dental-statistical-forensics/` | Deep numerical audit (SD/range, CIs, effect sizes, MCID, individual predictability, unit-of-analysis errors, clustering, multiplicity, missing data, measurement reliability, model appropriateness). |
 | Dental Evidence Report Artifact | `dental-evidence-report-artifact/` | Converts completed evidence analysis into HTML/PDF-ready reports without adding new scientific claims. |
 | Dental Content Creator | `dental-content-creator/` | Audience-aware dental content with platform adaptations and no-overclaim guardrails. |
-| Dental Image Generator | `dental-image-generator/` | AI-generated clinical illustrations and patient visuals via Google Gemini. |
+| Dental Image Generator | `dental-image-generator/` | AI-generated clinical illustrations and patient visuals via OpenAI's Images API (`gpt-image-2.5-sunburst`, paid). |
 
 ### Literature-skill workflow
 
