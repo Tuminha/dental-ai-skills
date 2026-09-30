@@ -119,7 +119,8 @@ indexed twice, even under two names.
 
 `import` prints one line per file: `IMPORTED`, `EXISTS` (the paper is on disk, under any
 name), `DUPLICATE_BYTES` (a file with the same sha256 is in the index), `NO_MATCH` (no tag
-and no DOI, and the closest title found is below 0.85 of 1.00; the line names it),
+and no DOI, and the closest paper found was refused or its title is below 0.85 of 1.00;
+the line names it and says why),
 `NO_DOI` (nothing found at all), `NOT_A_PDF`, `UNREADABLE` (a file, or a folder whose PDFs
 were therefore not seen) or `ERROR` (a network fault or a failed copy on that file; nothing
 of it is saved and the run goes on). It ends with one count line:
@@ -176,9 +177,13 @@ in the library. A PDF is identified in this order, and the tool never guesses:
 1. The `[PMID n]` or `[DOI ...]` tag in its file name.
 2. The DOI printed inside the PDF (first two pages, or the PDF metadata; needs poppler).
 3. The title in its file name: what follows `<year> - <author> - ` or `<year> <author> - `,
-   else the whole name. The paper found must match that title above 0.85 of 1.00.
-   Otherwise the file is `NO_MATCH`, the closest title is printed, and the file stays
-   where it is for a person to look at.
+   else the whole name. Up to three PubMed papers and three Crossref records are compared
+   with it. A paper is taken only when its title matches above 0.85 of 1.00 AND it agrees
+   with the name on the numbers in the title (a 5-year and a 10-year follow-up, Part I and
+   Part II are different papers), on the year (within one year) and on the first author
+   (surname, without accents or initials), and it is not a comment, reply, letter, erratum
+   or correction about a paper. Otherwise the file is `NO_MATCH`, the closest title and
+   the reason are printed, and the file stays where it is for a person to look at.
 
 `--topic-from-parent` files each PDF under the name of its parent folder, so the topic
 folders of an existing collection carry over. A file whose bytes are already in the index
@@ -186,34 +191,32 @@ is `DUPLICATE_BYTES` and skipped; a paper already on disk is `EXISTS` and skippe
 are copied, never moved, unless `--move` is given. The tool never deletes a source file.
 Names that start with a dot (Finder metadata on external drives) are skipped.
 
-The owner's case, in order. The library lives on an external drive; every download and
-every import goes there:
+Building a library from PDFs you already have, in order. Put the library on a large
+drive and point `PAPERS_DIR` at it; every download and every import then goes there:
 
 ```bash
 F=~/.claude/skills/dental-paper-fetch/scripts/paper_fetch.py   # or the path in this repository
-export PAPERS_DIR="/Volumes/Master HD 2026/Scientific Articles"
+export PAPERS_DIR="/Volumes/<your drive>/<library folder>"
 
-# 1. The papers the tool filed in Dropbox: the 24 tagged files, topic folders carried over.
-#    The other PDFs in that folder, about 2,140, are a copy of the archive library of step 2.
-find "$HOME/Library/CloudStorage/Dropbox/Scientific Papers 2026" \( -name '*[[]PMID *.pdf' -o -name '*[[]DOI *.pdf' \) -print0 \
-  | xargs -0 python3 "$F" import --topic-from-parent --no-figures
+# 1. A folder of PDFs in topic subfolders, for example an older library on another
+#    drive: a dry run first, then the import. Each subfolder name becomes the topic.
+python3 "$F" import "/Volumes/<old drive>/<old library>" --topic-from-parent --dry-run --no-figures
+python3 "$F" import "/Volumes/<old drive>/<old library>" --topic-from-parent --no-figures
 
-# 2. The older archive library, about 2,500 files in topic folders
-python3 "$F" import "/Volumes/Tuminha Archive/Scientific Papers Library" --topic-from-parent --dry-run --no-figures
-python3 "$F" import "/Volumes/Tuminha Archive/Scientific Papers Library" --topic-from-parent --no-figures
+# 2. Any other folder the same way, a cloud folder included; a paper already in the
+#    library is EXISTS or DUPLICATE_BYTES and is skipped
+python3 "$F" import "$HOME/<cloud folder>/<papers>" --topic-from-parent --no-figures
 
 # 3. What the library holds now
 python3 "$F" library stats
 ```
 
-Step 1 takes only the files with a `[PMID n]` or `[DOI ...]` tag in the name (`[[]` is
-how `find` matches a literal bracket; `'*[PMID *.pdf'` matches nothing) and is done in
-about a minute. Run on the whole folder it would take as long as step 2, and step 2 would
-then report most of the archive as `DUPLICATE_BYTES`.
-Step 2 runs one PubMed lookup per file at 3 per second, about 20 minutes for 2,500 files
-for the lookups alone; the license and BibTeX lookups per paper add to that, so plan for
-about an hour, and run `--dry-run` first to see the `NO_MATCH` and `NO_DOI` files without
-waiting for a copy. A `NO_MATCH` or `NO_DOI` file stays where it is and is listed for a
+A file with a `[PMID n]` or `[DOI ...]` tag in its name costs one lookup. A file without
+one is read for the DOI inside (poppler), and without that the title in its name is
+searched and checked against the name, as above. Plan for about an hour per 2,500 files:
+one PubMed lookup per file at 3 per second, plus the license and BibTeX lookups per paper.
+`--dry-run` shows the `NO_MATCH` and `NO_DOI` files without waiting for a copy.
+A `NO_MATCH` or `NO_DOI` file stays where it is and is listed for a
 person; the count line at the end says how many. `--no-figures` keeps the bulk import to
 the PDFs; `get <PMID> --topic "<Topic>"` on a paper that is already there answers
 `EXISTS` and extracts its figures on demand. Run `library stats` again after each new
@@ -368,6 +371,13 @@ Re-review this skill when any of the following changes materially:
   extraction. A malformed OpenAIRE or OpenAlex answer leaves the paper without that source
   instead of stopping the run. The exit-code table names which usage errors exit 1 and
   which exit 2.
+- 2026-09-30: Second review fixes. The title fallback of `import` compares up to three
+  PubMed and three Crossref candidates and takes a paper only when the numbers in the
+  title, the year and the first author in the file name agree with it and it is not a
+  comment, reply, letter or correction; a sibling record (a 10-year for a 5-year follow-up,
+  Part II for Part I, "Comment on") is refused and the reason printed. `_index.csv` keeps
+  any column added by hand through appends and `rebuild-index`. The library examples use
+  placeholder drive and folder names.
 
 ---
 

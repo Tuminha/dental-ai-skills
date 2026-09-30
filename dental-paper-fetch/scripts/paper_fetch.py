@@ -93,6 +93,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -286,14 +287,32 @@ def resolve_doi(doi):
     return paper_from_openalex(w, doi) if w else None
 
 
-def crossref_doi(title):
+def crossref_records(title, n=3):
+    """Up to n Crossref records whose title is close to the one given, as papers without a
+    PMID (doi, title, journal, year, first author). [] when Crossref has nothing, answers
+    with something else, or is unreachable."""
     try:
         r = get_json(with_mailto("https://api.crossref.org/works?" + urllib.parse.urlencode(
-            {"query.bibliographic": title, "rows": 1, "select": "DOI"})))
+            {"query.bibliographic": title, "rows": n, "select": "DOI,title,issued,author,container-title"})))
         items = r["message"]["items"]
-        return items[0]["DOI"].lower() if items else ""
-    except NET_ERRORS + (KeyError,):
-        return ""
+    except NET_ERRORS + (KeyError, TypeError):
+        return []
+    records = []
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict) or not it.get("DOI") or not it.get("title"):
+            continue
+        issued = ((it.get("issued") or {}).get("date-parts") or [[]])[0] or []
+        authors = it.get("author") or []
+        records.append({"pmid": "", "pmcid": "", "doi": str(it["DOI"]).lower(),
+                        "title": clean_text(it["title"][0]).rstrip("."),
+                        "journal": (it.get("container-title") or [""])[0],
+                        "year": str(issued[0]) if issued and issued[0] else "",
+                        "first_author": (authors[0].get("family") or "") if authors else ""})
+    return records
+
+
+def crossref_doi(title):
+    return (crossref_records(title, 1) or [{"doi": ""}])[0]["doi"]
 
 
 def resolve(ident):
@@ -891,14 +910,34 @@ def index_paper(paper, path, source, digest=""):
     append_index(index_row(paper, path, source, digest))
 
 
+def index_header():
+    """The columns of the index on disk, [] without an index."""
+    index = ROOT / "_index.csv"
+    if not index.exists():
+        return []
+    with open(index, newline="", encoding="utf-8") as fh:
+        return csv.DictReader(fh).fieldnames or []
+
+
+def index_fields(rows=(), header=()):
+    """INDEX_FIELDS, then every other column of the index on disk and of the rows, in the
+    order first seen: a column added by hand (notes, read on) survives every rewrite."""
+    fields = list(INDEX_FIELDS)
+    for name in list(header) + [k for r in rows for k in r]:
+        if name and name not in fields:
+            fields.append(name)
+    return fields
+
+
 def write_index(rows):
     """Write the whole index: to a temporary file next to it first, then into place, so a
     write that fails half way (disk full, the drive unplugged) leaves the old index intact."""
     index = ROOT / "_index.csv"
     tmp = index.with_name("_index.csv.tmp")
+    fields = index_fields(rows, index_header())
     try:
         with open(tmp, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore")
+            writer = csv.DictWriter(fh, fieldnames=fields, restval="", extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
         os.replace(tmp, index)
@@ -914,12 +953,13 @@ def append_index(row):
         return
     with open(index, newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
-        old = None if reader.fieldnames == INDEX_FIELDS else list(reader)
-    if old is not None:  # a column change: every row is written again under the new header
+        header = reader.fieldnames or []
+        old = None if set(INDEX_FIELDS) <= set(header) else list(reader)
+    if old is not None:  # a column is missing: every row is written again under the full header
         write_index(old + [row])
         return
-    with open(index, "a", newline="", encoding="utf-8") as fh:
-        csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore").writerow(row)
+    with open(index, "a", newline="", encoding="utf-8") as fh:  # under the header on disk, extra columns kept
+        csv.DictWriter(fh, fieldnames=header, restval="", extrasaction="ignore").writerow(row)
 
 
 def append_bibtex(paper, folder):
@@ -1070,12 +1110,104 @@ def tag_in_name(name):
     return "doi", re.sub(r"^(10\.\d{4,9})_", r"\1/", value).lower()
 
 
+NAME_PARTS = re.compile(r"^(?P<year>\d{4}|n\.d\.)\s+-?\s*(?P<author>.+?)\s+-\s+(?P<title>.+)$")
+# A title that starts like this is about a paper (a comment, reply, letter or correction),
+# not the paper; "Comment on", "Erratum", "Corrigendum" and "Retraction" anywhere say the same
+SIDE_NOTE = re.compile(r"(?i)^\W*(?:(?:comment|commentary|reply|response|letter|erratum|corrigendum|correction|"
+                       r"retraction|editorial)\b|re:|authors?'?s?\s+(?:reply|response)\b)"
+                       r"|\b(?:comment on|erratum|corrigendum|retraction|retracted)\b")
+
+
+def name_parts(stem):
+    """(year, first author, title) from a file name of the form "<year> - <author> - <title>"
+    or "<year> <author> - <title>", without any [PMID n] or [DOI ...] tag. Any other name
+    gives ("", "", <the whole name>)."""
+    stem = NAME_TAG.sub("", stem).strip(" -")
+    m = NAME_PARTS.match(stem)
+    if not m:
+        return "", "", stem
+    year = m.group("year") if m.group("year").isdigit() else ""
+    return year, m.group("author").strip(), m.group("title").strip(" -")
+
+
 def title_in_name(stem):
-    """The title in a file name: what follows "<year> - <author> - " or "<year> <author> - ",
-    without any [PMID n] or [DOI ...] tag; otherwise the whole stem."""
-    stem = NAME_TAG.sub("", stem).strip()
-    m = re.match(r"(?:\d{4}|n\.d\.)\s+-?\s*.+?\s+-\s+(.+)", stem)
-    return (m.group(1) if m else stem).strip(" -")
+    return name_parts(stem)[2]
+
+
+def title_numbers(title):
+    """The numbers and roman numerals in a title, sorted: "5" and "10" tell a 5-year from a
+    10-year follow-up, "i" and "ii" tell Part I from Part II. Two titles that read alike but
+    differ here belong to two papers."""
+    return sorted(w for w in re.findall(r"[a-z0-9]+", title.lower())
+                  if w.isdigit() or re.fullmatch(r"[ivx]{1,4}", w))
+
+
+def same_author(captured, candidate):
+    """True when the first author in a file name is the paper's first author. Surnames are
+    compared without case, accents or initials: "Berglundh T", "berglundh" and "Berglundh et
+    al" all match "Berglundh"; "Other" does not."""
+    plain = lambda s: "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+    words = lambda s: {w for w in re.findall(r"[a-z]+", plain(s).lower()) if len(w) > 1 and w not in ("et", "al")}
+    got, want = words(captured), words(candidate)
+    return bool(got and want) and (want <= got or got <= want)
+
+
+def disagreement(title, year, author, cand):
+    """Why a paper whose title reads like the file name is still another paper, or "" when
+    its kind, the numbers in the title, the year and the first author all agree with the
+    name. A name without a year or an author is checked on the title and its numbers."""
+    if SIDE_NOTE.search(cand["title"]) and not SIDE_NOTE.search(title):
+        return "it is a comment, reply, letter or correction about a paper, not the paper"
+    mine, theirs = title_numbers(title), title_numbers(cand["title"])
+    if mine != theirs:
+        return (f"the numbers differ: {' '.join(mine) or 'none'} in the name, "
+                f"{' '.join(theirs) or 'none'} in its title")
+    if year and (not cand["year"].isdigit() or abs(int(year) - int(cand["year"])) > 1):
+        return f"the year {year} in the name is not within a year of {cand['year'] or 'its unknown year'}"
+    if author and not same_author(author, cand["first_author"]):
+        return f"the first author {author} in the name is not {cand['first_author'] or 'known for it'}"
+    return ""
+
+
+def title_candidates(title):
+    """Up to three PubMed papers and three Crossref records whose title is close to the one
+    given, PubMed first, no DOI twice."""
+    candidates = pubmed_papers(pubmed_search(f"{title}[ti]", 3)[0])
+    for r in crossref_records(title):
+        if not any(p["doi"] == r["doi"] for p in candidates):
+            candidates.append(r)
+    return candidates
+
+
+def match_title(title, year="", author=""):
+    """(paper, "") for the one candidate that reads like the file name above TITLE_MATCH AND
+    agrees with it on its kind, the numbers in the title, the year and the first author.
+    (None, note) names the closest candidate and why it was not taken; (None, "") when
+    nothing was found at all. A Crossref record is looked up in PubMed and OpenAlex when
+    chosen, so it carries a PMID and PMCID when it has them."""
+    best, best_score, closest, closest_score, refused = None, 0.0, None, 0.0, ""
+    for cand in title_candidates(title):
+        score = similarity(title, cand["title"])
+        if score > closest_score:
+            closest, closest_score = cand, score
+        if score <= TITLE_MATCH:
+            continue
+        why = disagreement(title, year, author, cand)
+        if why:
+            refused = refused or f'closest title found: "{cand["title"]}" ({score:.2f} of 1.00) but {why}'
+            continue
+        if score > best_score:
+            best, best_score = cand, score
+    if best:
+        if not best["pmid"]:
+            best = resolve_doi(best["doi"]) or best
+        return doi_from_openalex(best), ""
+    if refused:
+        return None, refused
+    if closest:
+        return None, (f'closest title found: "{closest["title"]}" '
+                      f"({closest_score:.2f} of 1.00; more than {TITLE_MATCH} is needed)")
+    return None, ""
 
 
 def pdf_files(paths, problems=None):
@@ -1100,8 +1232,10 @@ def pdf_files(paths, problems=None):
 def identify(pdf):
     """The paper a PDF belongs to, as (paper, result, note). The tag in the file name comes
     first, then the DOI printed inside the PDF, then the title in the file name, which
-    counts only when the paper found matches it closely. The tool never guesses. The result
-    is "" with a paper, else NO_MATCH (the closest title is too far) or NO_DOI (nothing)."""
+    counts only when the paper found reads like it AND agrees with the name on its kind,
+    the numbers in the title, the year and the first author. The tool never guesses. The
+    result is "" with a paper, else NO_MATCH (the closest paper was refused, or its title
+    is too far) or NO_DOI (nothing found at all)."""
     tag = tag_in_name(pdf.name)
     paper = tag and (resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1]))
     if paper:
@@ -1110,13 +1244,12 @@ def identify(pdf):
     paper = resolve_doi(doi) if doi else None
     if paper:
         return paper, "", ""
-    title = title_in_name(pdf.stem)
-    found, score = resolve_title(title)
-    if found and score > TITLE_MATCH:
-        return found, "", ""
+    year, author, title = name_parts(pdf.stem)
+    found, note = match_title(title, year, author)
     if found:
-        return None, "NO_MATCH", (f'closest title found: "{found["title"]}" '
-                                  f"({score:.2f} of 1.00; more than {TITLE_MATCH} is needed)")
+        return found, "", ""
+    if note:
+        return None, "NO_MATCH", note
     return None, "NO_DOI", ("no tag in the name, " + ("the DOI inside matched no paper" if doi else
                                                      "no DOI inside") + " and no paper found for the title")
 
@@ -1304,6 +1437,7 @@ def rebuild_index():
             continue
         digest = sha256_of(f)
         row = by_file.get(rel) or by_sha.get(digest) or by_tag.get(tag)
+        extra = {k: v for k, v in (row or {}).items() if k not in INDEX_FIELDS}  # hand-added columns
         if row is not None:
             kept.add(id(row))
             if row.get("title"):  # a row without a title is a placeholder: resolve it again
@@ -1320,11 +1454,11 @@ def rebuild_index():
             resolved[tag] = paper
         paper = resolved[tag]
         if paper:
-            rows.append(index_row(paper, f, "on disk", digest))
+            rows.append({**extra, **index_row(paper, f, "on disk", digest)})
             print(f"ADDED  {rel}\n       {describe(paper)}")
             counts["ADDED"] += 1
         else:
-            row = {"saved_at": datetime.now().isoformat(timespec="seconds"), "topic": f.parent.name,
+            row = {**extra, "saved_at": datetime.now().isoformat(timespec="seconds"), "topic": f.parent.name,
                    "file": rel, "sha256": digest, "source": "on disk", "oa_status": "unknown"}
             if tag[0] == "pmid":  # exact in a name; a DOI read from a name may be altered
                 row["pmid"] = tag[1]

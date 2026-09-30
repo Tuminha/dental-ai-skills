@@ -574,6 +574,23 @@ def test_paper_fetch_index_columns() -> None:
         if pf.http_get.calls:
             fail("indexing must read no OpenAlex record on its own")
 
+        # A column added by hand survives an append and a rebuild
+        pf.write_index([{**rows[1], "notes": "read on Monday"}])
+        pdf2 = topic / "2020 Example - Second invented paper [PMID 902].pdf"
+        pdf2.write_bytes(b"%PDF-1.4 second invented bytes\n")
+        pf.index_paper(invented_paper(pmid="902", doi="10.1234/invented.902"), pdf2, "test")
+        rows = pf.index_rows()
+        with open(papers / "_index.csv", encoding="utf-8") as fh:
+            header = fh.readline().strip().split(",")
+        if header != pf.INDEX_FIELDS + ["notes"] or [r["notes"] for r in rows] != ["read on Monday", ""]:
+            fail(f"a hand-added column must survive an append, got {header!r} and {rows!r}")
+        code, text = printed(pf.rebuild_index)
+        rows = pf.index_rows()
+        if code != 0 or [r["pmid"] for r in rows] != ["901", "902"] or [r["notes"] for r in rows] != ["read on Monday", ""]:
+            fail(f"a hand-added column must survive rebuild-index, got {code}: {rows!r}\n{text}")
+        if pf.http_get.calls:
+            fail("a rebuild of known rows must make no lookup")
+
         # A rewrite that fails half way leaves the old index as it was, and no temporary file
         before = (papers / "_index.csv").read_bytes()
 
@@ -804,6 +821,82 @@ def test_paper_fetch_import_folder() -> None:
             fail(f"paper_fetch.py import --help does not list {flag}")
     if "TITLE_MATCH = 0.85" not in (ROOT / PAPER_FETCH).read_text(encoding="utf-8"):
         fail("a title found by a file name must need a similarity above 0.85")
+
+
+def test_paper_fetch_title_guard() -> None:
+    """A paper found by the title in a file name is taken only when the numbers in the title,
+    the year and the first author agree with the name and it is not a comment or correction:
+    a sibling record (Part II for Part I, 10-year for 5-year, "Comment on") is refused."""
+    with tempfile.TemporaryDirectory() as tmp:
+        source = pathlib.Path(tmp) / "source" / "Bone levels"
+        source.mkdir(parents=True)
+        long_title = "Invented long report on marginal bone level changes around implants in the posterior maxilla"
+        names = ["2020 - Example - Invented follow-up study Part I.pdf",
+                 "2020 - Example - Invented outcomes after 5 years of loading.pdf",
+                 f"2020 - Example - {long_title}.pdf",
+                 "2015 - Example - Invented sound paper about bone levels.pdf",
+                 "2020 - Other - Invented sound paper about bone levels.pdf",
+                 "2020 - Example T - Invented sound paper about bone levels.pdf",
+                 "2021 - Example - Invented crossref only paper.pdf"]
+        for n, name in enumerate(names):
+            (source / name).write_bytes(f"%PDF-1.4 invented file {n}\n".encode())
+        before = sorted(f.name for f in source.iterdir())
+        crossref = {"message": {"items": [{"DOI": "10.1234/CR.2105", "title": ["Invented crossref only paper"],
+                                           "issued": {"date-parts": [[2021, 3]]}, "author": [{"family": "Example", "given": "A"}],
+                                           "container-title": ["Invented J"]}]}}
+        openalex = {"ids": {}, "title": "Invented crossref only paper", "publication_year": 2021,
+                    "authorships": [{"author": {"display_name": "A Example"}}],
+                    "primary_location": {"source": {"display_name": "Invented J"}}, "open_access": {"oa_status": "green"}}
+        papers = pathlib.Path(tmp) / "papers"
+        pf = load_paper_fetch(papers, [
+            ("Part+I%5Bti%5D", pubmed_found("2101")),
+            ("id=2101", pubmed_summary("2101", "Invented follow-up study Part II")),
+            ("after+5+years", pubmed_found("2102")),
+            ("id=2102", pubmed_summary("2102", "Invented outcomes after 10 years of loading")),
+            ("Invented+long+report", pubmed_found("2103")),
+            ("id=2103", pubmed_summary("2103", "Comment on: " + long_title)),
+            ("Invented+sound+paper", pubmed_found("2104")),
+            ("id=2104", pubmed_summary("2104", "Invented sound paper about bone levels")),
+            ("Invented+crossref+only+paper%5Bti%5D", pubmed_found()),
+            ("cr.2105%5Bdoi%5D", pubmed_found()),
+            ("query.bibliographic=Invented+crossref+only+paper", json.dumps(crossref).encode()),
+            ("works/doi:10.1234/cr.2105", json.dumps(openalex).encode()),
+            ("api.crossref.org", b'{"message": {"items": []}}'),
+        ])
+        pf.doi_in_pdf = lambda pdf: ""
+        pf.shutil = types.SimpleNamespace(which=lambda tool, path=None: "/usr/bin/pdftotext" if tool == "pdftotext" else None,
+                                          copyfile=__import__("shutil").copyfile, copy2=tools_found().copy2,
+                                          move=tools_found().move)
+        args = types.SimpleNamespace(files=[str(source.parent)], topic=None, topic_from_parent=True, days=1,
+                                     move=False, yes=False, dry_run=False, no_figures=True)
+        code, text = printed(pf.cmd_import, args)
+        expected = "IMPORTED 2 | EXISTS 0 | DUPLICATE_BYTES 0 | NO_MATCH 5 | NO_DOI 0"
+        if code != 2 or text.strip().splitlines()[-1] != expected:
+            fail(f"title guard: expected exit 2 and {expected!r}, got {code}: {text}")
+        for reason in ("the numbers differ: i in the name, ii in its title",
+                       "the numbers differ: 5 in the name, 10 in its title",
+                       "it is a comment, reply, letter or correction about a paper, not the paper",
+                       "the year 2015 in the name is not within a year of 2020",
+                       "the first author Other in the name is not Example"):
+            if reason not in text:
+                fail(f"a refused sibling record must say why: {reason!r} missing in: {text}")
+        saved = sorted(f.name for f in (papers / "Bone levels").iterdir() if f.suffix == ".pdf")
+        if saved != ["2020 Example - Invented sound paper about bone levels - Invented J [PMID 2104].pdf",
+                     "2021 Example - Invented crossref only paper - Invented J [DOI 10.1234_cr.2105].pdf"]:
+            fail(f"only the agreeing paper and the Crossref-only paper may be imported, got {saved!r}")
+        if sorted(f.name for f in source.iterdir()) != before:
+            fail("the title guard must never delete or move a source file")
+        if not any("retmax=3" in c for c in pf.http_get.calls) or not any("rows=3" in c for c in pf.http_get.calls):
+            fail("the title fallback must ask PubMed and Crossref for three candidates each")
+        if pf.name_parts("2020 - Example - A title [PMID 5]") != ("2020", "Example", "A title") \
+                or pf.name_parts("2020 Example - A title") != ("2020", "Example", "A title") \
+                or pf.name_parts("Just a title") != ("", "", "Just a title"):
+            fail("name_parts must read year, author and title from a file name")
+        if not pf.same_author("Berglundh T", "Berglundh") or not pf.same_author("M\u00fcller et al", "Muller") \
+                or pf.same_author("Other", "Example") or pf.same_author("", "Example"):
+            fail("same_author must compare surnames without case, accents or initials")
+        if pf.title_numbers("Outcomes after 10 years, Part II") != ["10", "ii"]:
+            fail("title_numbers must list numbers and roman numerals")
 
 
 def test_paper_fetch_library_commands() -> None:
@@ -1046,6 +1139,7 @@ TESTS = [
     test_paper_fetch_file_names,
     test_paper_fetch_index_columns,
     test_paper_fetch_import_folder,
+    test_paper_fetch_title_guard,
     test_paper_fetch_library_commands,
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
