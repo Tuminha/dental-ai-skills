@@ -532,6 +532,40 @@ def test_paper_fetch_file_names() -> None:
             fail("a PDF saved under the older name, without the journal, must still count as EXISTS")
 
 
+def test_paper_fetch_index_columns() -> None:
+    """Every row gets the file's sha256 and the OpenAlex open-access status; an older index
+    is rewritten with the new columns; the same bytes under another name count as indexed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        papers = pathlib.Path(tmp) / "papers"
+        topic = papers / "Test topic"
+        topic.mkdir(parents=True)
+        (papers / "_index.csv").write_text("saved_at,topic,pmid,doi,file\n"
+                                           "2026-01-01T00:00:00,Test topic,900,,old.pdf\n", encoding="utf-8")
+        pf = load_paper_fetch(papers)
+        pf.lookup_license = lambda paper: "CC BY"
+        pf.OPENALEX["10.1234/invented.901"] = {"open_access": {"oa_status": "gold"}}
+        pdf = topic / "2020 Example - Invented test paper on bone levels [PMID 901].pdf"
+        pdf.write_bytes(b"%PDF-1.4 invented bytes\n")
+        pf.index_paper(invented_paper(pmid="901", doi="10.1234/invented.901"), pdf, "test")
+        rows = pf.index_rows()
+        if [r["pmid"] for r in rows] != ["900", "901"] or rows[0]["sha256"] != "" or rows[0]["oa_status"] != "":
+            fail(f"the older row must be kept with empty new columns, got {rows!r}")
+        expected = pf.sha256_of(pdf)
+        if rows[1]["sha256"] != expected or rows[1]["oa_status"] != "gold" or rows[1]["license"] != "CC BY":
+            fail(f"the new row must carry sha256, oa_status and license, got {rows[1]!r}")
+        with open(papers / "_index.csv", encoding="utf-8") as fh:
+            if fh.readline().strip().split(",") != pf.INDEX_FIELDS:
+                fail("the index header must list the current columns after a column change")
+        if not pf.in_index(digest=expected) or pf.in_index(digest="0" * 64):
+            fail("in_index must match a file by its sha256")
+        if not pf.in_index(invented_paper(pmid="900")) or pf.in_index(invented_paper(pmid="902")):
+            fail("in_index must still match a PMID")
+        if pf.oa_status(invented_paper(doi="10.9999/never.read")) != "unknown":
+            fail("a paper whose OpenAlex record was not read has oa_status unknown")
+        if pf.http_get.calls:
+            fail("indexing must read no OpenAlex record on its own")
+
+
 def test_paper_fetch_sources_and_safety() -> None:
     """OpenAIRE links, the '%PDF' check, the count line, the key redirect rule, poppler limits."""
     found = {"results": [
@@ -682,6 +716,7 @@ TESTS = [
     test_paper_fetch_import_needs_yes,
     test_paper_fetch_mount_guard,
     test_paper_fetch_file_names,
+    test_paper_fetch_index_columns,
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
     test_fixtures,

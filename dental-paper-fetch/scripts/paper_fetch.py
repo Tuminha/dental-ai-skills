@@ -42,7 +42,8 @@ Files go to "<PAPERS_DIR>/<Topic>/": the PDF, named "<year> <first author> - <ti
 <journal> [PMID n].pdf", its BibTeX entry in references.bib, and its figures in
 figures/<PMID n>/ with a figures.json that records each figure's label, caption, page, the
 paper's license and whether an image model may use it. The catalog of all papers is
-<PAPERS_DIR>/_index.csv.
+<PAPERS_DIR>/_index.csv, one row per file with its sha256 and its open-access status from
+OpenAlex (gold, hybrid, green, bronze, diamond, closed, or unknown when no record was read).
 
 Result lines: SAVED, EXISTS, OPEN_MANUALLY (free, but the script could not download it: a
 person must open the link), NO_FREE_COPY (no free legal copy found) or NOT_FOUND.
@@ -72,6 +73,7 @@ import collections
 import csv
 import difflib
 import functools
+import hashlib
 import html
 import http.client
 import json
@@ -93,7 +95,7 @@ from pathlib import Path
 # Everything is saved under PAPERS_DIR; without it, under ./papers in the current directory
 ROOT = Path(os.environ.get("PAPERS_DIR") or "papers").expanduser().absolute()
 INDEX_FIELDS = ["saved_at", "topic", "pmid", "pmcid", "doi", "year", "first_author",
-                "journal", "title", "license", "source", "file"]
+                "journal", "title", "license", "source", "file", "sha256", "oa_status"]
 # One honest identity for every request: APIs, repositories and publisher sites alike
 USER_AGENT = "dental-paper-fetch/1.0 (+https://github.com/Tuminha/dental-ai-skills)"
 # Optional contact address, sent to PubMed (email), OpenAlex and Crossref (mailto) only
@@ -802,19 +804,57 @@ def find_existing(paper):
     return None
 
 
-def in_index(paper):
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def index_rows():
     index = ROOT / "_index.csv"
     if not index.exists():
-        return False
+        return []
     with open(index, newline="", encoding="utf-8") as fh:
-        return any(paper["pmid"] and r.get("pmid") == paper["pmid"]
-                   or paper["doi"] and r.get("doi") == paper["doi"] for r in csv.DictReader(fh))
+        return list(csv.DictReader(fh))
 
 
-def index_paper(paper, path, source):
-    append_index({"saved_at": datetime.now().isoformat(timespec="seconds"),
-                  "topic": path.parent.name, "file": str(path.relative_to(ROOT)),
-                  "source": source, "license": lookup_license(paper), **paper})
+def in_index(paper=None, digest=""):
+    """True when the index holds this paper's PMID or DOI, or a file with these bytes."""
+    for r in index_rows():
+        if paper and (paper["pmid"] and r.get("pmid") == paper["pmid"]
+                      or paper["doi"] and r.get("doi") == paper["doi"]):
+            return True
+        if digest and r.get("sha256") == digest:
+            return True
+    return False
+
+
+def oa_status(paper):
+    """OpenAlex's open-access status (gold, hybrid, green, bronze, diamond or closed) from
+    the record read during this run, or 'unknown' when no record was read."""
+    w = OPENALEX.get(paper["doi"]) if paper["doi"] else None
+    return ((w or {}).get("open_access") or {}).get("oa_status") or "unknown"
+
+
+def index_row(paper, path, source, digest=""):
+    lic = lookup_license(paper)  # may read the OpenAlex record, which oa_status then uses
+    return {"saved_at": datetime.now().isoformat(timespec="seconds"),
+            "topic": path.parent.name, "file": str(path.relative_to(ROOT)),
+            "source": source, "license": lic, "sha256": digest or sha256_of(path),
+            "oa_status": oa_status(paper), **paper}
+
+
+def index_paper(paper, path, source, digest=""):
+    append_index(index_row(paper, path, source, digest))
+
+
+def write_index(rows):
+    with open(ROOT / "_index.csv", "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def append_index(row):
