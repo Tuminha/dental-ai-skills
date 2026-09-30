@@ -21,6 +21,7 @@ Use this skill after one or more of these skills have produced analysis:
 - `clinical-evidence-reviewer`
 - `dental-evidence-retriever`
 - `dental-statistical-forensics`
+- `dental-author-disclosures` (its register goes in one section, as a table)
 
 If the user has not yet produced the analysis, route to the correct analysis skill first.
 
@@ -46,10 +47,18 @@ Minimum JSON shape:
   "severity": "moderate",
   "metrics": [{"label": "Outcome", "value": "-1.2 ± 0.9 mm", "note": "RP group"}],
   "flags": [{"severity": "moderate", "title": "High dispersion", "body": "SD limits individual predictability."}],
-  "sections": [{"heading": "Clinical Interpretation", "body": "Markdown-lite text."}],
+  "sections": [{"heading": "Clinical Interpretation", "body": "Markdown-lite text.",
+                "table": {"columns": ["Author", "Status"], "rows": [["A. Author", "declared in paper"]]}}],
   "citations": [{"label": "Iasella 2003", "detail": "User-provided PDF"}]
 }
 ```
+
+A section may carry an optional `table` with `columns` (a list of headings) and `rows`
+(a list of lists, one per row). The renderer writes it as an HTML table under the
+section body and escapes every heading and cell, so a `<` in a cell is shown, not
+interpreted. `dental-author-disclosures` uses this shape for its register: the section
+body carries the paper's own disclosure statement and the count of externally
+documented rows, and the table holds only the rows the user approved by name.
 
 ## Report Structure
 

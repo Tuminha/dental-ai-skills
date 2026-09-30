@@ -166,7 +166,7 @@ The peer reviewer you wish you had. Feed it a single paper and get:
 
 - **Mandatory Phase 0 extraction first** — PICO, study classification (including randomization structure), unit of analysis, design essentials checklist — before any critique.
 - **Source text record**: Phase 0 table 0D states whether the full text, part of it or only the abstract was read, where it came from, its license, and whether supplements were read.
-- **Correct bias tool, in its native format** — auto-selects RoB 2 (incl. cluster and crossover variants; split-mouth via crossover logic plus paired-design checks), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence — not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
+- **Correct bias tool, in its native format**: auto-selects RoB 2 (incl. cluster and crossover variants; split-mouth via crossover logic plus paired-design checks), ROBINS-I, QUADAS-3 (preferred; QUADAS-2 only for legacy), AMSTAR 2 (using its native High/Moderate/Low/Critically Low confidence, not a fake score), Newcastle-Ottawa (star system), JBI, ARRIVE 2.0 + SYRCLE for animal, CRIS for in-vitro dental.
 - **Unit-of-analysis audit** — patient / implant / tooth / site / surface levels, flags hierarchical-clustering mistakes.
 - **Dental-specific red flags** — split-mouth clustering, success vs survival conflation, 2017 World Workshop definitions, short follow-up sold as long-term, implant-level vs patient-level mismatch, examiner calibration, radiographic standardization.
 - **Statistical Forensics Triage** — forces SD/range, CI, MCID, individual-predictability, multiplicity, missing-data, and model-appropriateness checks before the paper's numerical claims are accepted.
@@ -227,7 +227,7 @@ The numbers reviewer. Use it when the mean looks good but the SD, CI, MCID, miss
 Turns completed analysis into polished HTML/PDF-ready reports:
 
 - **Separation of analysis and presentation** — formats completed outputs from `research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, or `dental-statistical-forensics`; it does not invent evidence.
-- **Standalone HTML template** — restrained clinical styling, metric cards, severity flags, sections, and source tables.
+- **Standalone HTML template**: restrained clinical styling, metric cards, severity flags, sections, optional per-section tables (used for the author relationship register), and source tables.
 - **Renderer script** — `scripts/render_evidence_report.py` converts compact JSON into an HTML report.
 - **Example artifact** — see [`examples/iasella-statistical-forensics-report.html`](examples/iasella-statistical-forensics-report.html) and the source JSON in [`examples/iasella-statistical-forensics-report-data.json`](examples/iasella-statistical-forensics-report-data.json).
 

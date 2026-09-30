@@ -24,7 +24,9 @@ gives the mechanism: conflicts of interest are one reason negative trials and
 unfavorable results stay unpublished.
 Write one sentence in the Downgrade reasons cell of the GRADE table saying how
 that record changed, or did not change, each of these judgments. If the register
-was not run, write "register not run".
+was not run, write "register not run". The register is internal work product: a
+shared review carries the paper's own disclosure statement and a count of externally
+documented rows, and names a row only when the user approves it.
 
 ## Identity
 
@@ -362,6 +364,7 @@ This skill must be re-reviewed when any of the following changes materially:
 - 2026-09-30: The hand-off lines on sponsor and author relationships now state the permitted route. The `dental-author-disclosures` register may support a judgment on indirectness and on publication bias, with one sentence of explanation and no automatic downgrade. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), sections 7.8.2 and 7.8.4, and the PubMed abstract of GRADE guidelines 5 (PMID: 21802904), both read on 2026-09-30. GRADE guidance and guideline-body positions were not re-reviewed on this date.
 - 2026-09-30 (review follow-up): The publication bias trigger uses the wording of GRADE guidelines 5 (a number of small studies, most of them commercially funded), in the hand-off lines and in the downgrading criteria. Section 7.8.4 of the Cochrane Handbook is cited for the mechanism only. The explanation sentence covers the papers and the register, and goes in the Downgrade reasons cell of the GRADE table. Basis: the same two sources, read on 2026-09-30.
 - 2026-09-30 (full text): New subsection "Full text first" under Step 1 names `dental-paper-fetch` as the way to get each key PDF before appraising. The Evidence Retrieval Mode block has one new line, "Full text obtained: [yes / partial / abstract only] via [source]". GRADE guidance and guideline-body positions were not re-reviewed for this change.
+- 2026-09-30 (re-audit): The hand-off lines gained one sentence on sharing the `dental-author-disclosures` register: it is internal work product, and a shared review names a row only when the user approves it. GRADE guidance and guideline-body positions were not re-reviewed for this change.
 
 ---
 

@@ -121,6 +121,30 @@ def test_examples_and_artifact_renderer() -> None:
         if "Iasella 2003 Ridge Preservation" not in output.read_text(encoding="utf-8"):
             fail("renderer output missing expected text")
 
+        # An optional per-section table renders as an HTML table with every cell escaped
+        payload = {"title": "Table check", "verdict": "v", "metrics": [], "flags": [], "citations": [],
+                   "sections": [{"heading": "Author relationships", "body": "1 of 2 rows externally documented",
+                                 "table": {"columns": ["Author", "Status <b>"],
+                                           "rows": [["A. Author", "declared in paper"],
+                                                    ["<script>alert(1)</script>", "externally documented"]]}}]}
+        payload_path = pathlib.Path(tmp) / "table.json"
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+        table_output = pathlib.Path(tmp) / "table.html"
+        run([
+            sys.executable,
+            "dental-evidence-report-artifact/scripts/render_evidence_report.py",
+            "--input",
+            str(payload_path),
+            "--output",
+            str(table_output),
+        ])
+        rendered = table_output.read_text(encoding="utf-8")
+        if "<th>Author</th>" not in rendered or "<td>declared in paper</td>" not in rendered:
+            fail("a section table must render as an HTML table with its columns and rows")
+        if "<script>" in rendered or "&lt;script&gt;alert(1)&lt;/script&gt;" not in rendered \
+                or "<th>Status &lt;b&gt;</th>" not in rendered:
+            fail("every table heading and cell must be escaped")
+
 
 def test_helper_scripts() -> None:
     continuous = run([

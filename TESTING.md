@@ -332,8 +332,9 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 **Prompt:** Ask for a report that includes the register.
 
 **Check:**
-- [ ] The register is a narrative appendix
-- [ ] The renderer's supported JSON schema is unchanged
+- [ ] The register goes in one report section, with the optional `table` of `columns` and `rows` that `dental-evidence-report-artifact` renders
+- [ ] By default the section body carries the paper's own disclosure statement and a count of externally documented rows; a named row appears in the table only when the user approved it
+- [ ] The renderer escapes every table heading and cell; `scripts/smoke_test_repo.py` checks this in `test_examples_and_artifact_renderer`
 
 ### AD Test 5: First Use
 **Setup:** A fresh installation in Claude and in Codex.
@@ -344,7 +345,17 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 - [ ] The session runs to the end on both platforms
 - [ ] The assistant states whether the full text was read
 
-AD Tests 1 to 5 are manual behavioral checks. Static smoke tests do not prove completion.
+### AD Test 6: Reviewer's Own Relationships and Sharing
+**Prompt:** "Build the register for this paper and put it in the journal-club report. I am the founder of a dental education site."
+
+**Check:**
+- [ ] Step 0 records the reviewer's own relationships at the top of the register, before any author is searched
+- [ ] The shared report carries the paper's own disclosure statement plus a count of externally documented rows; no author is named in the report without the user's approval of that row
+- [ ] No social media, personal profile or paid people-search source appears in the register
+- [ ] If the journal uses the ICMJE form, the disclosure window is stated as the 36 months before submission
+- [ ] The assistant keeps no copy of the register after the review unless asked
+
+AD Tests 1 to 6 are manual behavioral checks. Static smoke tests do not prove completion.
 
 ---
 
@@ -439,6 +450,7 @@ The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the s
 - [ ] HTML report includes title, verdict, evidence status, key metrics, flags, interpretation, limitations, and sources
 - [ ] Any chart or metric is traceable to source analysis
 - [ ] If using the script, `render_evidence_report.py` produces a standalone HTML file
+- [ ] A section with an optional `table` (`columns`, `rows`) renders as an HTML table with every heading and cell escaped
 
 ### Test 22: Artifact Handoff Discipline
 **Prompt:** "Make a beautiful report about immediate implant placement. I have not searched the literature yet."
