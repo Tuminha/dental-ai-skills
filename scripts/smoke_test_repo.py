@@ -589,6 +589,7 @@ def import_test_module(papers: pathlib.Path):
         ("invented.1003%5Bdoi%5D", pubmed_found("1003")),
         ("Some+other+invented+title", pubmed_found("1002")),
         ("made-up-title", pubmed_found()),
+        ("1+unknown+copy", pubmed_found()),
         ("api.crossref.org", b'{"message": {"items": []}}'),
     ])
     pf.doi_in_pdf = lambda pdf: "10.1234/invented.1003" if pdf.name == "scan.pdf" else ""
@@ -605,6 +606,7 @@ def test_paper_fetch_import_folder() -> None:
         source = pathlib.Path(tmp) / "source" / "Peri-implantitis"
         source.mkdir(parents=True)
         same, other = b"%PDF-1.4 the same bytes\n", b"%PDF-1.4 another scan\n"
+        (source / "1 unknown copy of the same.pdf").write_bytes(same)  # sorts first, matches nothing
         (source / "2020 - Example - Invented test paper on bone levels [PMID 1001].pdf").write_bytes(same)
         (source / "Another scan [PMID 1001].pdf").write_bytes(other)
         (source / "Some other invented title far away.pdf").write_bytes(b"%PDF-1.4 no match\n")
@@ -620,9 +622,11 @@ def test_paper_fetch_import_folder() -> None:
         # A dry run says what would happen and writes nothing
         pf = import_test_module(papers)
         code, text = printed(pf.cmd_import, args)
-        expected = "DRY_RUN  WOULD_IMPORT 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 1"
+        expected = "DRY_RUN  WOULD_IMPORT 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 2"
         if code != 2 or text.strip().splitlines()[-1] != expected:
             fail(f"dry run: expected exit 2 and {expected!r}, got {code}: {text}")
+        if "NO_DOI  " + str(source / "1 unknown copy of the same.pdf") not in text:
+            fail("a copy that cannot be identified is NO_DOI, and must not block the tagged copy after it")
         if papers.exists() or "._hidden" in text:
             fail("a dry run must write nothing, and Finder metadata files are skipped")
         if "-> " + str(papers / "Peri-implantitis" / "2020 Example - Invented test paper on bone levels - Invented J [PMID 1001].pdf") not in text:
@@ -632,7 +636,7 @@ def test_paper_fetch_import_folder() -> None:
         args.dry_run = False
         pf = import_test_module(papers)
         code, text = printed(pf.cmd_import, args)
-        expected = "IMPORTED 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 1"
+        expected = "IMPORTED 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 2"
         if code != 2 or text.strip().splitlines()[-1] != expected:
             fail(f"import: expected exit 2 and {expected!r}, got {code}: {text}")
         saved = sorted(f.name for f in (papers / "Peri-implantitis").iterdir() if f.suffix == ".pdf")
@@ -656,10 +660,31 @@ def test_paper_fetch_import_folder() -> None:
         # Run again: every file already in the library is the same bytes, so no lookup is made for it
         pf = import_test_module(papers)
         code, text = printed(pf.cmd_import, args)
-        if text.strip().splitlines()[-1] != "IMPORTED 0 | EXISTS 1 | DUPLICATE_BYTES 3 | NO_MATCH 1 | NO_DOI 1":
+        if text.strip().splitlines()[-1] != "IMPORTED 0 | EXISTS 1 | DUPLICATE_BYTES 4 | NO_MATCH 1 | NO_DOI 1":
             fail(f"a second import of the same folder must skip by bytes, got: {text}")
         if any("id=1003" in call for call in pf.http_get.calls):
             fail("a file whose bytes are in the index must cost no lookup")
+
+        # A stale index row, its file deleted by hand, must not make the same bytes DUPLICATE_BYTES
+        stale = pathlib.Path(tmp) / "papers-stale"
+        pf = import_test_module(stale)
+        stale.mkdir()
+        pf.write_index([{"saved_at": "2026-01-01T00:00:00", "topic": "Gone", "pmid": "1001",
+                         "file": "Gone/deleted by hand [PMID 1001].pdf", "sha256": pf.sha256_of(source / "scan.pdf")}])
+        args_scan = types.SimpleNamespace(**{**vars(args), "files": [str(source / "scan.pdf")]})
+        code, text = printed(pf.cmd_import, args_scan)
+        if code != 0 or "IMPORTED  " not in text or not (stale / "Peri-implantitis").exists():
+            fail(f"a row whose file is gone must not count as a duplicate, got {code}: {text}")
+
+        # A relative path keeps a parent folder name: "." is the folder itself, not an empty name
+        cwd = os.getcwd()
+        os.chdir(source)
+        try:
+            listed = pf.pdf_files(["."])
+        finally:
+            os.chdir(cwd)
+        if not listed or not all(f.is_absolute() and f.parent.name == "Peri-implantitis" for f in listed):
+            fail(f"pdf_files must give absolute paths so --topic-from-parent has a name, got {listed!r}")
 
     help_text = run([sys.executable, PAPER_FETCH, "import", "--help"]).stdout
     for flag in ("--topic-from-parent", "--dry-run"):
@@ -686,12 +711,19 @@ def test_paper_fetch_library_commands() -> None:
         (b / "[PMID 4040].pdf").write_bytes(b"%PDF-1.4 unknown pmid\n")
         (b / "copy [PMID 1001].pdf").write_bytes(same)
         (b / "no tag here.pdf").write_bytes(b"%PDF-1.4 no tag\n")
+        (b / "[DOI 10.1234_invented_2020_123].pdf").write_bytes(b"%PDF-1.4 brackets in the doi\n")
+        (b / "[DOI 10.9999_nothing].pdf").write_bytes(b"%PDF-1.4 doi that resolves nowhere\n")
         pf = load_paper_fetch(papers, [
             ("id=1003", pubmed_summary("1003", "Invented scan with a DOI inside", "10.1234/invented.1003")),
             ("id=1005", pubmed_summary("1005", "Invented paper found by its DOI tag", "10.1234/invented.1005")),
+            ("id=1006", pubmed_summary("1006", "Invented paper with brackets in its DOI", "10.1234/invented(2020)123")),
             ("invented.1005%5Bdoi%5D", pubmed_found("1005")),
+            ("invented%282020%29123%5Bdoi%5D", pubmed_found("1006")),
+            ("invented_2020_123%5Bdoi%5D", pubmed_found()),
+            ("nothing%5Bdoi%5D", pubmed_found()),
             ("id=4040", json.dumps({"result": {"uids": ["4040"], "4040": {"uid": "4040", "error": "no such record"}}}).encode()),
         ])
+        pf.doi_in_pdf = lambda pdf: "10.1234/invented(2020)123" if "2020_123" in pdf.name else ""
         pf.write_index([{"saved_at": "2026-01-01T00:00:00", "topic": "Topic A", "pmid": "1001",
                          "doi": "10.1234/invented.1001", "title": "Invented test paper on bone levels",
                          "file": "Topic A/" + known.name, "sha256": pf.sha256_of(known), "license": "CC BY"},
@@ -700,29 +732,34 @@ def test_paper_fetch_library_commands() -> None:
         code, text = printed(pf.rebuild_index)
         rows = pf.index_rows()
         expected = [("Topic A/" + known.name, "1001"), ("Topic A/[DOI 10.1234_invented.1005].pdf", "1005"),
-                    ("Topic A/old name [PMID 1003].pdf", "1003"), ("Topic B/[PMID 4040].pdf", "4040"),
-                    ("Topic B/copy [PMID 1001].pdf", "1001")]
+                    ("Topic A/old name [PMID 1003].pdf", "1003"),
+                    ("Topic B/[DOI 10.1234_invented_2020_123].pdf", "1006"), ("Topic B/[DOI 10.9999_nothing].pdf", ""),
+                    ("Topic B/[PMID 4040].pdf", "4040"), ("Topic B/copy [PMID 1001].pdf", "1001")]
         if code != 0 or [(r["file"], r["pmid"]) for r in rows] != expected:
             fail(f"rebuild-index rows: expected {expected!r}, got {[(r['file'], r['pmid']) for r in rows]!r}: {text}")
-        if rows[0]["license"] != "CC BY" or rows[4]["license"] != "CC BY" or rows[4]["title"] != rows[0]["title"]:
+        if rows[0]["license"] != "CC BY" or rows[6]["license"] != "CC BY" or rows[6]["title"] != rows[0]["title"]:
             fail("a known row must be kept, also for a second file with the same bytes")
         if rows[1]["doi"] != "10.1234/invented.1005" or rows[2]["title"] != "Invented scan with a DOI inside":
             fail(f"unknown tags must be resolved, got {rows[1]!r} {rows[2]!r}")
-        if rows[3]["title"] or rows[3]["source"] != "on disk" or rows[3]["oa_status"] != "unknown":
-            fail(f"a tag that matches no paper keeps a row with the tag only, got {rows[3]!r}")
+        if rows[3]["doi"] != "10.1234/invented(2020)123":
+            fail(f"a DOI tag that cannot be read back must fall back to the DOI inside the PDF, got {rows[3]!r}")
+        if rows[4]["doi"] or rows[4]["title"] or rows[4]["source"] != "on disk":
+            fail(f"a DOI read from a name that resolves nowhere must not be stored, got {rows[4]!r}")
+        if rows[5]["title"] or rows[5]["source"] != "on disk" or rows[5]["oa_status"] != "unknown":
+            fail(f"a PMID tag that matches no paper keeps a row with the PMID and file only, got {rows[5]!r}")
         if any(len(r["sha256"]) != 64 for r in rows):
             fail("every row must carry the file's sha256")
         if any("id=1001" in call for call in pf.http_get.calls):
             fail("a row the index already holds must cost no lookup")
         last = text.strip().splitlines()[-1]
-        if "kept 2 | added 2 | no metadata 1 | dropped 1 | files without a tag 1" not in last or "NO_TAG  Topic B/no tag here.pdf" not in text:
+        if "kept 2 | added 3 | no metadata 2 | dropped 1 | files without a tag 1" not in last or "NO_TAG  Topic B/no tag here.pdf" not in text:
             fail(f"rebuild-index must report kept, added, no metadata, dropped and untagged, got: {text}")
 
         code, text = printed(pf.library_stats)
         lines = text.splitlines()
-        if code != 0 or lines[1].split() != ["3", "Topic", "A"] or lines[2].split() != ["3", "Topic", "B"]:
+        if code != 0 or lines[1].split() != ["3", "Topic", "A"] or lines[2].split() != ["5", "Topic", "B"]:
             fail(f"stats must count PDFs per topic, got: {text}")
-        if "PAPERS  6 PDF files in 2 topic folders | 5 index rows" not in text:
+        if "PAPERS  8 PDF files in 2 topic folders | 7 index rows" not in text:
             fail(f"stats must count files and index rows, got: {text}")
         if "NO_TAG  1 file(s)" not in text or "Topic B/no tag here.pdf" not in text:
             fail(f"stats must list files without a tag, got: {text}")

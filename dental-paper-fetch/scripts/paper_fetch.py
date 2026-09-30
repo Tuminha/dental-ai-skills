@@ -848,6 +848,15 @@ def in_index(paper=None, digest=""):
     return False
 
 
+def indexed_file(digest):
+    """The library file that holds these bytes, by the index, or None when no row has this
+    sha256 or the row's file is gone (deleted by hand; rebuild-index drops such rows)."""
+    for r in index_rows():
+        if digest and r.get("sha256") == digest and r.get("file") and (ROOT / r["file"]).is_file():
+            return ROOT / r["file"]
+    return None
+
+
 def oa_status(paper):
     """OpenAlex's open-access status (gold, hybrid, green, bronze, diamond or closed) from
     the record read during this run, or 'unknown' when no record was read."""
@@ -1049,7 +1058,7 @@ def pdf_files(paths):
     """The PDFs named on the command line. A folder gives every PDF under it, subfolders
     included. Names that start with a dot (Finder metadata on external drives) are skipped."""
     files = []
-    for path in (Path(p).expanduser() for p in paths):
+    for path in (Path(p).expanduser().absolute() for p in paths):  # "." must have a parent name
         if path.is_dir():
             files += sorted(f for f in path.rglob("*") if f.is_file() and f.suffix.lower() == ".pdf"
                             and not f.name.startswith("."))
@@ -1094,16 +1103,17 @@ def import_one(pdf, topic, args, seen):
         print(f"NOT_A_PDF  {pdf}")
         return "NOT_A_PDF"
     digest = sha256_of(pdf)
-    if digest in seen["digests"] or in_index(digest=digest):
-        print(f"DUPLICATE_BYTES  {pdf}\n       a file with the same bytes is already in the library")
+    if digest in seen["digests"] or indexed_file(digest):
+        print(f"DUPLICATE_BYTES  {pdf}\n       the same bytes are in the library already, or in an earlier file of this run")
         return "DUPLICATE_BYTES"
-    seen["digests"].add(digest)
     paper, result, note = identify(pdf)
     if not paper:
         print(f"{result}  {pdf}\n       {note}\n"
               f"       To file it by hand: rename it with \"[PMID n]\", put it in the topic folder, "
               f"then run: python3 paper_fetch.py get <PMID> --topic \"{topic}\"")
         return result
+    # Only now: a copy that could not be identified must not block a later, tagged copy
+    seen["digests"].add(digest)
     existing = find_existing(paper)
     if existing or file_tag(paper) in seen["tags"]:
         where = existing or f"[{file_tag(paper)}] from an earlier file in this run"
@@ -1255,17 +1265,26 @@ def rebuild_index():
             counts["KEPT"] += 1
             continue
         if tag not in resolved:
-            resolved[tag] = resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1])
+            paper = resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1])
+            if not paper and tag[0] == "doi":
+                # file_tag() writes "/" and every other special character as "_", so a DOI
+                # with brackets or a second "/" cannot be read back from the name
+                doi = doi_in_pdf(f)
+                paper = resolve_doi(doi) if doi else None
+            resolved[tag] = paper
         paper = resolved[tag]
         if paper:
             rows.append(index_row(paper, f, "on disk", digest))
             print(f"ADDED  {rel}\n       {describe(paper)}")
             counts["ADDED"] += 1
         else:
-            rows.append({"saved_at": datetime.now().isoformat(timespec="seconds"), "topic": f.parent.name,
-                         "file": rel, "sha256": digest, tag[0]: tag[1], "source": "on disk",
-                         "oa_status": "unknown"})
-            print(f"NO_METADATA  {rel}\n       {tag[0].upper()} {tag[1]} matched no paper; the row holds the tag only")
+            row = {"saved_at": datetime.now().isoformat(timespec="seconds"), "topic": f.parent.name,
+                   "file": rel, "sha256": digest, "source": "on disk", "oa_status": "unknown"}
+            if tag[0] == "pmid":  # exact in a name; a DOI read from a name may be altered
+                row["pmid"] = tag[1]
+            rows.append(row)
+            print(f"NO_METADATA  {rel}\n       {tag[0].upper()} {tag[1]} matched no paper; the row holds "
+                  f"the file{' and the PMID' if tag[0] == 'pmid' else ''} only")
             counts["NO_METADATA"] += 1
     write_index(rows)
     dropped = sum(1 for r in old if id(r) not in kept)
