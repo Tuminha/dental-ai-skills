@@ -574,6 +574,28 @@ def test_paper_fetch_index_columns() -> None:
         if pf.http_get.calls:
             fail("indexing must read no OpenAlex record on its own")
 
+        # A rewrite that fails half way leaves the old index as it was, and no temporary file
+        before = (papers / "_index.csv").read_bytes()
+
+        class Boom:
+            def __init__(self, fh: object, **kwargs: object) -> None:
+                self.fh = fh
+
+            def writeheader(self) -> None:
+                self.fh.write("header\n")
+
+            def writerows(self, rows: object) -> None:
+                raise OSError(28, "No space left on device")
+        pf.csv = types.SimpleNamespace(DictWriter=Boom, DictReader=__import__("csv").DictReader)
+        try:
+            pf.write_index(rows)
+        except OSError:
+            pass
+        else:
+            fail("a failed write must raise")
+        if (papers / "_index.csv").read_bytes() != before or list(papers.glob("*.tmp")):
+            fail("a rewrite that fails must leave the old index intact and no temporary file")
+
 
 def pubmed_summary(pmid: str, title: str, doi: str = "") -> bytes:
     ids = [{"idtype": "pubmed", "value": pmid}] + ([{"idtype": "doi", "value": doi}] if doi else [])
@@ -693,6 +715,24 @@ def test_paper_fetch_import_folder() -> None:
         if listed[0] or not listed[1] or not all(f.is_absolute() and f.parent.name == "Peri-implantitis"
                                                  for f in listed[1]):
             fail(f"pdf_files must give absolute, normalized paths so --topic-from-parent has a name, got {listed!r}")
+
+        # A folder that cannot be read is UNREADABLE, counted, and the run exits 2
+        if os.geteuid() != 0:  # as root every folder can be read, so there is nothing to see
+            locked = pathlib.Path(tmp) / "locked" / "Peri-implantitis"
+            (locked / "closed").mkdir(parents=True)
+            (locked / "closed" / "hidden [PMID 1001].pdf").write_bytes(same)
+            (locked / "open [PMID 1003].pdf").write_bytes(b"%PDF-1.4 readable\n")
+            (locked / "closed").chmod(0)
+            try:
+                pf = import_test_module(pathlib.Path(tmp) / "papers-locked")
+                pf.doi_in_pdf = lambda pdf: ""
+                args_locked = types.SimpleNamespace(**{**vars(args), "files": [str(locked.parent)], "dry_run": True})
+                code, text = printed(pf.cmd_import, args_locked)
+            finally:
+                (locked / "closed").chmod(0o755)
+            if code != 2 or "UNREADABLE  " + str(locked / "closed") not in text \
+                    or not text.strip().endswith("| UNREADABLE 1"):
+                fail(f"an unreadable folder must be reported, counted and make the run exit 2, got {code}: {text}")
 
         # A copy that fails is ERROR, and the next copy of the same paper is still imported
         failing = pathlib.Path(tmp) / "papers-failing"

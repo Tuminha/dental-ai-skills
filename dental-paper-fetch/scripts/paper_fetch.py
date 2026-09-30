@@ -877,25 +877,34 @@ def index_paper(paper, path, source, digest=""):
 
 
 def write_index(rows):
-    with open(ROOT / "_index.csv", "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    """Write the whole index: to a temporary file next to it first, then into place, so a
+    write that fails half way (disk full, the drive unplugged) leaves the old index intact."""
+    index = ROOT / "_index.csv"
+    tmp = index.with_name("_index.csv.tmp")
+    try:
+        with open(tmp, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(tmp, index)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def append_index(row):
     index = ROOT / "_index.csv"
-    old = []  # rows to rewrite: none for a new file, all of them after a column change
-    if index.exists():
-        with open(index, newline="", encoding="utf-8") as fh:
-            reader = csv.DictReader(fh)
-            old = list(reader) if reader.fieldnames != INDEX_FIELDS else None
-    with open(index, "a" if old is None else "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore")
-        if old is not None:
-            writer.writeheader()
-            writer.writerows(old)
-        writer.writerow(row)
+    if not index.exists():
+        write_index([row])
+        return
+    with open(index, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        old = None if reader.fieldnames == INDEX_FIELDS else list(reader)
+    if old is not None:  # a column change: every row is written again under the new header
+        write_index(old + [row])
+        return
+    with open(index, "a", newline="", encoding="utf-8") as fh:
+        csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore").writerow(row)
 
 
 def append_bibtex(paper, folder):
@@ -1054,15 +1063,20 @@ def title_in_name(stem):
     return (m.group(1) if m else stem).strip(" -")
 
 
-def pdf_files(paths):
+def pdf_files(paths, problems=None):
     """The PDFs named on the command line. A folder gives every PDF under it, subfolders
-    included. Names that start with a dot (Finder metadata on external drives) are skipped."""
+    included, folder by folder in name order. Names that start with a dot (Finder metadata
+    on external drives) are skipped. A folder that cannot be read is added to problems, as
+    (folder, reason), so the run can say what it did not see."""
     files = []
+    note = lambda error: problems is not None and problems.append((Path(error.filename), error.strerror))
     # "." and ".." must give real folder names, so paths are made absolute and normalized
     for path in (Path(os.path.normpath(Path(p).expanduser().absolute())) for p in paths):
         if path.is_dir():
-            files += sorted(f for f in path.rglob("*") if f.is_file() and f.suffix.lower() == ".pdf"
-                            and not f.name.startswith("."))
+            for folder, subfolders, names in os.walk(path, onerror=note):
+                subfolders.sort()
+                files += sorted(Path(folder) / n for n in names
+                                if n.lower().endswith(".pdf") and not n.startswith("."))
         else:
             files.append(path)
     return files
@@ -1153,7 +1167,10 @@ def cmd_import(args):
     """File PDFs downloaded by hand, or whole folders of them, into the library."""
     if not shutil.which("pdftotext"):
         sys.exit("error: import reads the DOI with poppler; install it with: brew install poppler")
-    files = pdf_files(args.files)
+    problems = []
+    files = pdf_files(args.files, problems)
+    for folder, reason in problems:
+        print(f"UNREADABLE  {folder}  ({reason}); the PDFs in it were not seen")
     if not args.files:
         if not args.topic:
             sys.exit("error: import with no file names needs --topic")
@@ -1183,6 +1200,8 @@ def cmd_import(args):
     if args.dry_run:
         print(f"DRY_RUN  {len(files)} PDF file(s). Nothing will be copied or moved.")
     seen, counts = {"digests": set(), "tags": set()}, collections.Counter()
+    if problems:
+        counts["UNREADABLE"] += len(problems)
     for f in files:
         try:
             result = import_one(f, f.parent.name if args.topic_from_parent else args.topic, args, seen)

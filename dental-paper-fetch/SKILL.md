@@ -120,8 +120,9 @@ indexed twice, even under two names.
 `import` prints one line per file: `IMPORTED`, `EXISTS` (the paper is on disk, under any
 name), `DUPLICATE_BYTES` (a file with the same sha256 is in the index), `NO_MATCH` (no tag
 and no DOI, and the closest title found is below 0.85 of 1.00; the line names it),
-`NO_DOI` (nothing found at all), `NOT_A_PDF`, `UNREADABLE` or `ERROR` (a network fault or
-a failed copy on that file; nothing of it is saved and the run goes on). It ends with one count line:
+`NO_DOI` (nothing found at all), `NOT_A_PDF`, `UNREADABLE` (a file, or a folder whose PDFs
+were therefore not seen) or `ERROR` (a network fault or a failed copy on that file; nothing
+of it is saved and the run goes on). It ends with one count line:
 `IMPORTED n | EXISTS n | DUPLICATE_BYTES n | NO_MATCH n | NO_DOI n`. With `--dry-run` the
 lines say `WOULD_IMPORT` and the count line starts with `DRY_RUN`; nothing is written.
 With no file names it lists the PDFs in `~/Downloads` as `WOULD_IMPORT` or `NO_DOI` and
@@ -211,7 +212,9 @@ person; the count line at the end says how many. `--no-figures` keeps the bulk i
 the PDFs; `get <PMID> --topic "<Topic>"` on a paper that is already there answers
 `EXISTS` and extracts its figures on demand. Run `library stats` again after each new
 drive or folder is imported. `library rebuild-index` writes the index again from the
-files on disk, for a library that was moved or edited by hand.
+files on disk, for a library that was moved or edited by hand. The index is always written
+to a temporary file first and moved into place, so a write that fails half way leaves the
+old index as it was.
 
 ## Figures and reuse_hint
 
