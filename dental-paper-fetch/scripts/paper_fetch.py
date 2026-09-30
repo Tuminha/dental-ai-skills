@@ -28,7 +28,9 @@ reading the DOI printed inside them.
 
 Environment variables, all optional:
   PAPERS_DIR         folder for everything the tool saves; default: ./papers under the
-                     current directory
+                     current directory. On an external drive (/Volumes/<name>/...), every
+                     command that touches the folder first checks that the drive is
+                     connected, so nothing is ever written to a plain folder under /Volumes
   CORE_API_KEY       API key for core.ac.uk; without it CORE is skipped
   PAPER_FETCH_EMAIL  contact address sent to PubMed (E-utilities "email" parameter) and to
                      OpenAlex and Crossref ("mailto" parameter); sent to no other service
@@ -739,6 +741,21 @@ def report_figures(paper, pdf):
 
 # ---------- storage ----------
 
+def volume_of(path):
+    """'/Volumes/<name>' for a path on an external drive, else None."""
+    parts = Path(path).parts
+    return Path(*parts[:3]) if len(parts) >= 3 and parts[:2] == ("/", "Volumes") else None
+
+
+def require_drive():
+    """Stop when PAPERS_DIR names an external drive that is not connected. Without this
+    check the first write would create a plain folder under /Volumes on the computer's own
+    disk, and the library would be split in two without anyone noticing."""
+    volume = volume_of(ROOT)
+    if volume and not os.path.ismount(volume):
+        sys.exit(f"The drive {volume.name} is not connected. Connect it or set PAPERS_DIR.")
+
+
 def topic_dir(topic):
     name = safe_name(topic)
     if not name:
@@ -1084,6 +1101,8 @@ def main():
     i.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     sub.add_parser("topics", help="list topic folders and how many PDFs each holds")
     args = ap.parse_args()
+    if args.cmd != "search" or args.download:  # every command that reads or writes the folder
+        require_drive()
     try:
         return {"get": cmd_get, "search": cmd_search, "import": cmd_import,
                 "topics": cmd_topics}[args.cmd](args)

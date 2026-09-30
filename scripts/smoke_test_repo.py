@@ -479,6 +479,33 @@ def test_paper_fetch_import_needs_yes() -> None:
         fail("paper_fetch.py import --help does not list --yes")
 
 
+def test_paper_fetch_mount_guard() -> None:
+    """PAPERS_DIR on an external drive that is not connected: one sentence, exit 1, nothing
+    made under /Volumes. A connected drive is checked once; a folder elsewhere never."""
+    root = "/Volumes/Invented Drive/Scientific Articles"
+    sentence = "The drive Invented Drive is not connected. Connect it or set PAPERS_DIR."
+    for command in (["topics"], ["import", "--topic", "T", "--yes"], ["get", "1", "--topic", "T"]):
+        done = subprocess.run([sys.executable, PAPER_FETCH, *command], cwd=ROOT, text=True,
+                              capture_output=True, env={**os.environ, "PAPERS_DIR": root})
+        if done.returncode != 1 or done.stderr.strip() != sentence or done.stdout:
+            fail(f"{command[0]} on a missing drive must exit 1 with one sentence, "
+                 f"got {done.returncode}: {done.stderr!r} {done.stdout!r}")
+    if pathlib.Path("/Volumes/Invented Drive").exists():
+        fail("the guard must not create anything under /Volumes")
+    pf = load_paper_fetch(pathlib.Path(root))
+    asked: list[str] = []
+    pf.os = types.SimpleNamespace(environ=os.environ, path=types.SimpleNamespace(
+        ismount=lambda path: asked.append(str(path)) or True))
+    pf.require_drive()
+    if asked != ["/Volumes/Invented Drive"]:
+        fail(f"the guard must ask whether /Volumes/<name> is a mount point, got {asked!r}")
+    pf.ROOT = pathlib.Path(tempfile.gettempdir()) / "papers"
+    asked.clear()
+    pf.require_drive()
+    if asked:
+        fail("a folder outside /Volumes must not be checked for a mount point")
+
+
 def test_paper_fetch_sources_and_safety() -> None:
     """OpenAIRE links, the '%PDF' check, the count line, the key redirect rule, poppler limits."""
     found = {"results": [
@@ -627,6 +654,7 @@ TESTS = [
     test_paper_fetch_pmid_without_doi,
     test_paper_fetch_certificate_retry,
     test_paper_fetch_import_needs_yes,
+    test_paper_fetch_mount_guard,
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
     test_fixtures,
