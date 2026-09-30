@@ -38,10 +38,11 @@ Environment variables, all optional:
 Every request identifies itself with one User-Agent: dental-paper-fetch/1.0 plus the
 repository link.
 
-Files go to "<PAPERS_DIR>/<Topic>/": the PDF, its BibTeX entry in references.bib, and its
-figures in figures/<PMID n>/ with a figures.json that records each figure's label, caption,
-page, the paper's license and whether an image model may use it. The catalog of all papers
-is <PAPERS_DIR>/_index.csv.
+Files go to "<PAPERS_DIR>/<Topic>/": the PDF, named "<year> <first author> - <title> -
+<journal> [PMID n].pdf", its BibTeX entry in references.bib, and its figures in
+figures/<PMID n>/ with a figures.json that records each figure's label, caption, page, the
+paper's license and whether an image model may use it. The catalog of all papers is
+<PAPERS_DIR>/_index.csv.
 
 Result lines: SAVED, EXISTS, OPEN_MANUALLY (free, but the script could not download it: a
 person must open the link), NO_FREE_COPY (no free legal copy found) or NOT_FOUND.
@@ -780,8 +781,13 @@ def file_tag(paper):
 
 
 def pdf_name(paper):
-    title = safe_name(paper["title"])[:90].rstrip(" .,-")
-    return f"{paper['year'] or 'n.d.'} {safe_name(paper['first_author']) or 'Unknown'} - {title} [{file_tag(paper)}].pdf"
+    """'<year> <first author> - <title> - <journal> [PMID n].pdf', the title cut at 80
+    characters and the journal at 40. The tag stays last, so find_existing also matches
+    names saved before the journal was part of the name."""
+    head = f"{paper['year'] or 'n.d.'} {safe_name(paper['first_author']) or 'Unknown'}"
+    title = safe_name(paper["title"])[:80].rstrip(" .,-")
+    journal = safe_name(paper["journal"])[:40].rstrip(" .,-")
+    return " - ".join(part for part in (head, title, journal) if part) + f" [{file_tag(paper)}].pdf"
 
 
 def find_existing(paper):

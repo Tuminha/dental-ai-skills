@@ -506,6 +506,32 @@ def test_paper_fetch_mount_guard() -> None:
         fail("a folder outside /Volumes must not be checked for a mount point")
 
 
+def test_paper_fetch_file_names() -> None:
+    """The file name carries year, first author, title (80 characters at most), journal (40
+    at most) and the tag last. An older name without the journal is still found."""
+    with tempfile.TemporaryDirectory() as tmp:
+        papers = pathlib.Path(tmp) / "papers"
+        pf = load_paper_fetch(papers)
+        paper = invented_paper(pmid="801", journal="Invented J Periodontol: Part B/2")
+        name = pf.pdf_name(paper)
+        if name != ("2020 Example - Invented test paper on bone levels - "
+                    "Invented J Periodontol Part B 2 [PMID 801].pdf"):
+            fail(f"unexpected file name: {name!r}")
+        long = invented_paper(doi="10.1234/invented.802", title="T" * 100, journal="J" * 50)
+        name = pf.pdf_name(long)
+        if name != f"2020 Example - {'T' * 80} - {'J' * 40} [DOI 10.1234_invented.802].pdf":
+            fail(f"title and journal must be cut at 80 and 40 characters, got {name!r}")
+        no_journal = pf.pdf_name(invented_paper(pmid="803", journal=""))
+        if no_journal != "2020 Example - Invented test paper on bone levels [PMID 803].pdf":
+            fail(f"without a journal the name has no empty part, got {no_journal!r}")
+        topic = papers / "Test topic"
+        topic.mkdir(parents=True)
+        old = topic / "2020 Example - Invented test paper on bone levels [PMID 801].pdf"
+        old.write_bytes(b"%PDF-1.4\n")
+        if pf.find_existing(paper) != old:
+            fail("a PDF saved under the older name, without the journal, must still count as EXISTS")
+
+
 def test_paper_fetch_sources_and_safety() -> None:
     """OpenAIRE links, the '%PDF' check, the count line, the key redirect rule, poppler limits."""
     found = {"results": [
@@ -655,6 +681,7 @@ TESTS = [
     test_paper_fetch_certificate_retry,
     test_paper_fetch_import_needs_yes,
     test_paper_fetch_mount_guard,
+    test_paper_fetch_file_names,
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
     test_fixtures,
