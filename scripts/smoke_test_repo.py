@@ -17,6 +17,7 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROTOCOL_VERSION = "2026.05.16"
 REQUIRED_SKILLS = {
+    "dental-author-disclosures",
     "clinical-evidence-reviewer",
     "dental-content-creator",
     "dental-evidence-report-artifact",

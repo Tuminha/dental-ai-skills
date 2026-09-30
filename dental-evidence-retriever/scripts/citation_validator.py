@@ -47,35 +47,66 @@ def normalize_identifier(raw: str) -> tuple[str, str]:
     return "doi", value
 
 
-def url_exists(url: str, timeout: float) -> bool:
+def fetch_json(url: str, timeout: float) -> dict | None:
     request = urllib.request.Request(url, method="GET", headers={"User-Agent": "dental-ai-skills-citation-validator/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - user-requested network check
-            return 200 <= response.status < 400
+            return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        return 200 <= exc.code < 400
+        try:
+            return json.loads(exc.read().decode("utf-8"))
+        except Exception:
+            return None
     except Exception:
+        return None
+
+
+# A web page that answers 200 proves nothing: PubMed serves a challenge page
+# for any PMID, real or not, and publishers block scripts behind a DOI. Ask the
+# registries for the record instead. True: the record exists. False: the
+# registry says it does not. None: no clear answer, so the citation stays
+# unverified.
+def pmid_exists(pmid: str, timeout: float) -> bool | None:
+    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={urllib.parse.quote(pmid)}"
+    data = fetch_json(url, timeout)
+    record = (data or {}).get("result", {}).get(pmid) if isinstance(data, dict) else None
+    if not isinstance(record, dict):
+        return None
+    if record.get("error"):
         return False
+    return str(record.get("uid")) == pmid
+
+
+def doi_exists(doi: str, timeout: float) -> bool | None:
+    url = f"https://doi.org/api/handles/{urllib.parse.quote(doi, safe='/')}"
+    data = fetch_json(url, timeout)
+    code = data.get("responseCode") if isinstance(data, dict) else None
+    if code == 1:
+        return True
+    if code in (100, 200):
+        return False
+    return None
 
 
 def validate_one(raw: str, check_network: bool, timeout: float) -> ValidationResult:
     identifier_type, normalized = normalize_identifier(raw)
     if identifier_type == "pmid":
         syntax_valid = bool(PMID_RE.match(normalized))
-        url = f"https://pubmed.ncbi.nlm.nih.gov/{urllib.parse.quote(normalized)}/"
     else:
         normalized = normalized.rstrip(".")
         syntax_valid = bool(DOI_RE.match(normalized))
-        url = f"https://doi.org/{urllib.parse.quote(normalized, safe='/')}"
 
     resolves = None
     warning = None
     if not syntax_valid:
         warning = f"{identifier_type.upper()} syntax is invalid or unsupported."
     elif check_network:
-        resolves = url_exists(url, timeout)
-        if not resolves:
-            warning = f"{identifier_type.upper()} syntax is valid but did not resolve during this check."
+        exists = pmid_exists if identifier_type == "pmid" else doi_exists
+        resolves = exists(normalized, timeout)
+        if resolves is False:
+            warning = f"{identifier_type.upper()} syntax is valid but the registry has no record of it."
+        elif resolves is None:
+            warning = f"{identifier_type.upper()} could not be checked online; treat it as unverified."
 
     return ValidationResult(
         input=raw,

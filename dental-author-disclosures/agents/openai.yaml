@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dental Author Disclosures"
+  short_description: "Source-based author relationship review"
+  default_prompt: "Use $dental-author-disclosures to review this paper's author relationships with dated sources and explicit uncertainty."
+policy:
+  allow_implicit_invocation: true

@@ -52,3 +52,7 @@ The literature skills hand off to each other automatically when the user crosses
 - Keep `agents/openai.yaml` metadata aligned with each skill's `SKILL.md`.
 - Prefer minimal diffs and clear commit messages.
 - Methodology updates (case definitions, appraisal tools, guideline-body URLs, GRADE handbook revisions) require updating the "Methodology Review Date" block at the bottom of the affected skill.
+
+## Francisco Summary (final response format)
+
+- Close finished work with the **Francisco Summary** block defined in `~/.claude/CLAUDE.md`: 🧑‍⚕️ what this means in plain terms, 🙋 what you need to do, 🤖 what an agent can do without you, 💡 what I propose, and a 🟢/🟡/🔴 flag. It goes first in the final response, not last, and is skipped on quick answers and lookups.
