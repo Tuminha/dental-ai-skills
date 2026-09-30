@@ -733,6 +733,21 @@ def test_image_generator_fake_api() -> None:
             if "brand asset" not in body["prompt"] or not body["prompt"].startswith("Create a friendly"):
                 fail("the brand note must follow the patient-friendly preset")
 
+            # A .webp asset must be accepted from its suffix alone, whatever the system mime table says
+            webp_asset = folder / "logo.webp"
+            webp_asset.write_bytes(pixels)
+            code, _ = printed(module.main, ["--prompt", "Post-op care", "--brand-asset", str(webp_asset),
+                                            "--output", str(folder / "branded-webp.png")])
+            _, _, body = fake.requests[2]
+            if code != 0 or body.get("images") != [{"image_url": "data:image/webp;base64,"
+                                                                 + base64.b64encode(pixels).decode("ascii")}]:
+                fail(f"a .webp brand asset must be accepted and sent as image/webp: code {code}, {body.get('images')}")
+            (folder / "logo.gif").write_bytes(pixels)
+            code, text = printed(module.main, ["--prompt", "x", "--brand-asset", str(folder / "logo.gif"),
+                                               "--output", str(folder / "gif.png")])
+            if code != 1 or "png, jpg or webp" not in text:
+                fail("an unsupported asset suffix must exit 1 with the plain message")
+
             module.MAX_ASSET_BYTES = len(pixels) - 1
             sent = len(fake.requests)
             code, text = printed(module.main, ["--prompt", "x", "--brand-asset", str(asset),

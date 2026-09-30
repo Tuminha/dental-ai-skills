@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import mimetypes
 import os
 import sys
 from pathlib import Path
@@ -39,6 +38,9 @@ TIMEOUT_SECONDS = 300
 # gpt-image-2.5 models only (OpenAPI spec, CreateImageRequest.quality, read 2026-09-30).
 QUALITIES = ("low", "medium", "high", "xhigh", "max", "auto")
 OUTPUT_FORMATS = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".webp": "webp"}
+# The brand asset type comes from the file suffix, not from the system mime table:
+# mimetypes.guess_type() refuses .webp on Python 3.10 to 3.12 unless the OS ships one.
+ASSET_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 # The JSON edits body carries the asset as a base64 data URL, and the API caps that string at
 # 20,971,520 characters (ImageRefParam.image_url maxLength, OpenAPI spec read 2026-09-30).
 # Base64 adds one third, so the file itself must stay under about 15 MB.
@@ -83,8 +85,8 @@ def image_data_url(path: str) -> str:
     asset = Path(path)
     if not asset.is_file():
         raise FileNotFoundError(f"Brand asset not found: {path}")
-    mime = mimetypes.guess_type(str(asset))[0]
-    if mime not in {"image/png", "image/jpeg", "image/webp"}:
+    mime = ASSET_MIME.get(asset.suffix.lower())
+    if mime is None:
         raise ValueError(f"Brand asset must be a png, jpg or webp file, got: {asset.name}")
     size = asset.stat().st_size
     if size > MAX_ASSET_BYTES:
