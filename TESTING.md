@@ -347,7 +347,7 @@ AD Tests 1 to 5 are manual behavioral checks. Static smoke tests do not prove co
 
 ## Dental Paper Fetch
 
-PF Tests 1 to 4 and 7 need no network. `scripts/smoke_test_repo.py` runs PF Tests 1 and 7. PF Tests 5 and 6 are prompts that need no download.
+PF Tests 1 to 4, 7 and 8 need no network. `scripts/smoke_test_repo.py` runs PF Tests 1, 7 and 8. PF Tests 5 and 6 are prompts that need no download.
 
 ### PF Test 1: Help and Topics (offline)
 **Commands, from the repo root:**
@@ -412,7 +412,7 @@ python3 dental-paper-fetch/scripts/paper_fetch.py import --help
 ### PF Test 7: Script Logic with a Fake Network (offline)
 **Command, from the repo root:** `python3 scripts/smoke_test_repo.py`
 
-The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the script as a module and replace its network function with a fake. No request leaves the machine.
+The `test_paper_fetch_*` tests after `test_paper_fetch_offline` (seven here, five more in PF Test 8) load the script as a module and replace its network function with a fake. No request leaves the machine.
 
 **Check:**
 - [ ] `test_paper_fetch_version_folder`: the newest PubMed Central version that holds the PDF wins, and the license comes from that same version
@@ -422,6 +422,18 @@ The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the s
 - [ ] `test_paper_fetch_import_needs_yes`: `import` with no file names lists the PDFs and copies nothing without `--yes`
 - [ ] `test_paper_fetch_sources_and_safety`: OpenAIRE links of the same DOI only and string links from a list only, the PDF marker check, the count line, the refused redirect for the CORE key, the poppler time limit (figures and `import`) and the one-time install note
 - [ ] `test_paper_fetch_notice_pdf`: a one-page PDF under 60 KB is a repository notice, never saved; `OPEN_MANUALLY` says so; a two-page PDF is saved as before
+
+### PF Test 8: Library Mode (offline)
+**Command, from the repo root:** `python3 scripts/smoke_test_repo.py`
+
+Five more tests with the same fake network. The import test builds a source folder with a tagged PDF, a second scan of the same paper, a byte-for-byte copy under another name, a file whose title matches nothing closely, a file with no identifier at all, a file with a DOI inside, and a Finder metadata file.
+
+**Check:**
+- [ ] `test_paper_fetch_mount_guard`: with `PAPERS_DIR` under `/Volumes/<name>/` and no such drive, `topics`, `import` and `get` exit 1 with `The drive <name> is not connected. Connect it or set PAPERS_DIR.`, nothing is created under `/Volumes`, a connected drive is checked once and a folder elsewhere never
+- [ ] `test_paper_fetch_file_names`: the name is `<year> <first author> - <title> - <journal> [PMID n].pdf`, the title cut at 80 characters and the journal at 40, no empty part without a journal, and a file saved under the older name without the journal is still `EXISTS`
+- [ ] `test_paper_fetch_index_columns`: a new row carries `sha256`, `oa_status` and license; an older index is rewritten with the new header and its rows kept; `in_index` matches by sha256 and by PMID; no OpenAlex record is read for the index alone
+- [ ] `test_paper_fetch_import_folder`: `--dry-run` prints `DRY_RUN  WOULD_IMPORT 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 1`, writes nothing and skips the dot file; the real run copies the two files under the parent folder's name, leaves every source file in place, indexes with sha256, names the closest title for `NO_MATCH`; a second run of the same folder is `DUPLICATE_BYTES 3` with no lookup for those files; `--topic-from-parent` and `--dry-run` are in the help; the title threshold is 0.85
+- [ ] `test_paper_fetch_library_commands`: `library rebuild-index` keeps known rows without a lookup (also for a second file with the same bytes), resolves a `[PMID n]` and a `[DOI ...]` tag once each, keeps a tag-only row for a tag that matches no paper, lists a file without a tag, drops the row of a file that is gone; `library stats` counts PDFs per topic, files and index rows, untagged files and groups of files with the same bytes
 
 ---
 
