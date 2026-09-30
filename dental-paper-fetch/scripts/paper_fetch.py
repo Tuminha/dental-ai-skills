@@ -1113,7 +1113,12 @@ def tag_in_name(name):
     return "doi", re.sub(r"^(10\.\d{4,9})_", r"\1/", value).lower()
 
 
-NAME_PARTS = re.compile(r"^(?P<year>\d{4}|n\.d\.)\s+-?\s*(?P<author>.+?)\s+-\s+(?P<title>.+)$")
+NAME_PARTS = [re.compile(r"^(?P<year>\d{4}|n\.d\.)\s+-?\s*(?P<author>.+?)\s+-\s+(?P<title>.+)$"),
+              re.compile(r"^(?P<author>.+?)\s+-\s+(?P<year>\d{4}|n\.d\.)\s+-\s+(?P<title>.+)$")]  # Zotero's order
+NUMBER_WORDS = {w: n for n, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve "
+                                           "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split())}
+NUMBER_WORDS.update(thirty=30, forty=40, fifty=50, sixty=60, seventy=70, eighty=80, ninety=90, hundred=100)
+ROMAN = re.compile(r"^(x{0,3})(ix|iv|v?i{0,3})$")
 # A title that starts like this is about a paper (a comment, reply, letter or correction),
 # not the paper; "Comment on", "Erratum", "Corrigendum" and "Retraction" anywhere say the same
 SIDE_NOTE = re.compile(r"(?i)^\W*(?:(?:comment|commentary|reply|response|letter|erratum|corrigendum|correction|"
@@ -1122,11 +1127,11 @@ SIDE_NOTE = re.compile(r"(?i)^\W*(?:(?:comment|commentary|reply|response|letter|
 
 
 def name_parts(stem):
-    """(year, first author, title) from a file name of the form "<year> - <author> - <title>"
-    or "<year> <author> - <title>", without any [PMID n] or [DOI ...] tag. Any other name
-    gives ("", "", <the whole name>)."""
+    """(year, first author, title) from a file name of the form "<year> - <author> - <title>",
+    "<year> <author> - <title>" or Zotero's "<author> - <year> - <title>", without any
+    [PMID n] or [DOI ...] tag. Any other name gives ("", "", <the whole name>)."""
     stem = NAME_TAG.sub("", stem).strip(" -")
-    m = NAME_PARTS.match(stem)
+    m = next((m for m in (pattern.match(stem) for pattern in NAME_PARTS) if m), None)
     if not m:
         return "", "", stem
     year = m.group("year") if m.group("year").isdigit() else ""
@@ -1138,20 +1143,32 @@ def title_in_name(stem):
 
 
 def title_numbers(title):
-    """The numbers and roman numerals in a title, sorted: "5" and "10" tell a 5-year from a
-    10-year follow-up, "i" and "ii" tell Part I from Part II. Two titles that read alike but
-    differ here belong to two papers."""
-    return sorted(w for w in re.findall(r"[a-z0-9]+", title.lower())
-                  if w.isdigit() or re.fullmatch(r"[ivx]{1,4}", w))
+    """The numbers in a title, sorted, with number words and roman numerals read as numbers:
+    "5-year", "five-year" and "Part V" all give 5, so 5 and 10 tell a 5-year from a 10-year
+    follow-up and 1 and 2 tell Part I from Part II. Two titles that read alike but differ
+    here belong to two papers."""
+    numbers = []
+    for w in re.findall(r"[a-z0-9]+", title.lower()):
+        if w.isdigit():
+            numbers.append(int(w))
+        elif w in NUMBER_WORDS:
+            numbers.append(NUMBER_WORDS[w])
+        elif ROMAN.match(w) and w:
+            tens, units = ROMAN.match(w).groups()
+            numbers.append(10 * len(tens) + {"": 0, "i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5,
+                                             "vi": 6, "vii": 7, "viii": 8, "ix": 9}[units])
+    return sorted(numbers)
 
 
 def same_author(captured, candidate):
-    """True when the first author in a file name is the paper's first author. Surnames are
-    compared without case, accents or initials: "Berglundh T", "berglundh" and "Berglundh et
-    al" all match "Berglundh"; "Other" does not."""
+    """True when the first author in a file name is the paper's first author. Only the first
+    surname of the name counts ("Lindhe and Berglundh" is Lindhe), compared without case,
+    accents or initials: "Berglundh T", "berglundh" and "Berglundh et al" all match
+    "Berglundh"; "Other" does not."""
     plain = lambda s: "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
     words = lambda s: {w for w in re.findall(r"[a-z]+", plain(s).lower()) if len(w) > 1 and w not in ("et", "al")}
-    got, want = words(captured), words(candidate)
+    first = re.split(r"[,;&]|\s+(?:and|et|y|und)\s+", captured, maxsplit=1)[0]
+    got, want = words(first), words(candidate)
     return bool(got and want) and (want <= got or got <= want)
 
 
@@ -1161,10 +1178,12 @@ def disagreement(title, year, author, cand):
     name. A name without a year or an author is checked on the title and its numbers."""
     if SIDE_NOTE.search(cand["title"]) and not SIDE_NOTE.search(title):
         return "it is a comment, reply, letter or correction about a paper, not the paper"
+    if SIDE_NOTE.search(title) and not SIDE_NOTE.search(cand["title"]):
+        return "the name is a comment, reply, letter or correction about a paper, and this is the paper itself"
     mine, theirs = title_numbers(title), title_numbers(cand["title"])
     if mine != theirs:
-        return (f"the numbers differ: {' '.join(mine) or 'none'} in the name, "
-                f"{' '.join(theirs) or 'none'} in its title")
+        return (f"the numbers differ: {' '.join(map(str, mine)) or 'none'} in the name, "
+                f"{' '.join(map(str, theirs)) or 'none'} in its title")
     if year and (not cand["year"].isdigit() or abs(int(year) - int(cand["year"])) > 1):
         return f"the year {year} in the name is not within a year of {cand['year'] or 'its unknown year'}"
     if author and not same_author(author, cand["first_author"]):
@@ -1185,10 +1204,12 @@ def title_candidates(title):
 def match_title(title, year="", author=""):
     """(paper, "") for the one candidate that reads like the file name above TITLE_MATCH AND
     agrees with it on its kind, the numbers in the title, the year and the first author.
-    (None, note) names the closest candidate and why it was not taken; (None, "") when
-    nothing was found at all. A Crossref record is looked up in PubMed and OpenAlex when
-    chosen, so it carries a PMID and PMCID when it has them."""
-    best, best_score, closest, closest_score, refused = None, 0.0, None, 0.0, ""
+    A name with neither a year nor an author is taken only when exactly one candidate
+    passes: two papers with the same title (a consensus report printed in two journals)
+    are NO_MATCH, both named. (None, note) names the closest candidate and why it was
+    not taken; (None, "") when nothing was found at all. A Crossref record is looked up
+    in PubMed and OpenAlex when chosen, so it carries a PMID and PMCID when it has them."""
+    passing, closest, closest_score, refused = [], None, 0.0, ""
     for cand in title_candidates(title):
         score = similarity(title, cand["title"])
         if score > closest_score:
@@ -1199,8 +1220,13 @@ def match_title(title, year="", author=""):
         if why:
             refused = refused or f'closest title found: "{cand["title"]}" ({score:.2f} of 1.00) but {why}'
             continue
-        if score > best_score:
-            best, best_score = cand, score
+        passing.append((score, cand))
+    if len(passing) > 1 and not year and not author:
+        names = "; ".join(f'{"PMID " + c["pmid"] if c["pmid"] else "DOI " + c["doi"]} "{c["title"]}"'
+                          for _, c in passing)
+        return None, (f"{len(passing)} papers carry this title and the name gives no year or first author "
+                      f"to tell them apart: {names}; a plain-title file needs a [PMID n] or [DOI ...] tag")
+    best = max(passing, key=lambda sc: sc[0])[1] if passing else None
     if best:
         if not best["pmid"]:
             best = resolve_doi(best["doi"]) or best

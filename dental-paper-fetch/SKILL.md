@@ -171,14 +171,19 @@ in the library. A PDF is identified in this order, and the tool never guesses:
 
 1. The `[PMID n]` or `[DOI ...]` tag in its file name.
 2. The DOI printed inside the PDF (first two pages, or the PDF metadata; needs poppler).
-3. The title in its file name: what follows `<year> - <author> - ` or `<year> <author> - `,
-   else the whole name. Up to three PubMed papers and three Crossref records are compared
-   with it. A paper is taken only when its title matches above 0.85 of 1.00 AND it agrees
-   with the name on the numbers in the title (a 5-year and a 10-year follow-up, Part I and
-   Part II are different papers), on the year (within one year) and on the first author
-   (surname, without accents or initials), and it is not a comment, reply, letter, erratum
-   or correction about a paper. Otherwise the file is `NO_MATCH`, the closest title and
-   the reason are printed, and the file stays where it is for a person to look at.
+3. The title in its file name: what follows `<year> - <author> - `, `<year> <author> - `
+   or Zotero's `<author> - <year> - `, else the whole name. Up to three PubMed papers and
+   three Crossref records are compared with it. A paper is taken only when its title
+   matches above 0.85 of 1.00 AND it agrees with the name on the numbers in the title (a
+   5-year and a 10-year follow-up, Part I and Part II are different papers; "five", "5"
+   and "V" are the same number), on the year (within one year) and on the first surname
+   of the author (without accents or initials), and both or neither are a comment, reply,
+   letter, erratum or correction about a paper. A name with neither a year nor an author
+   is taken only when exactly one paper passes; two papers with the same title (a
+   consensus report printed in two journals) are refused and both named, so a plain-title
+   file is safest with a `[PMID n]` or `[DOI ...]` tag in its name. Otherwise the file is
+   `NO_MATCH`, the closest title and the reason are printed, and the file stays where it
+   is for a person to look at.
 
 `--topic-from-parent` files each PDF under the name of its parent folder, so the topic
 folders of an existing collection carry over. A file whose bytes are already in the index
@@ -389,7 +394,11 @@ Re-review this skill when any of the following changes materially:
   comment, reply, letter or correction; a sibling record (a 10-year for a 5-year follow-up,
   Part II for Part I, "Comment on") is refused and the reason printed. `_index.csv` keeps
   any column added by hand through appends and `rebuild-index`. The library examples use
-  placeholder drive and folder names.
+  placeholder drive and folder names. Round 2: the comment check runs both ways (a file
+  named "Comment on X" is not filed under X); a name with neither year nor author needs
+  exactly one passing paper; number words and roman numerals count as numbers; Zotero's
+  `<author> - <year> - <title>` names are read; only the first surname of the author
+  counts.
 
 ---
 
