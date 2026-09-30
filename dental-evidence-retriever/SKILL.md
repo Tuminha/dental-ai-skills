@@ -63,7 +63,8 @@ Convert the clinical question into a PICO. If the question is ambiguous, write t
 - Comparator: [exact alternative]
 - Outcomes (critical/important): [list, ordered by importance]
 - Study design filter: [RCT only / SR + RCT / observational accepted / all designs]
-- Time horizon / publication window: [e.g., last 10 years / no limit]
+- Publication window: [e.g., last 10 years / no limit]
+- Follow-up horizon: [short-term under 3 years / medium-term 3 to 5 years / long-term 5 years or more, as `clinical-evidence-reviewer` defines it]
 - Language filter: [English / English+Spanish+Portuguese / no limit]
 ```
 
@@ -280,6 +281,7 @@ This skill must be re-reviewed when any of the following changes materially:
 
 **Dated changes:**
 - 2026-09-30 (full text): New subsection "Full text first" under Step 4 names `dental-paper-fetch` as the way to get the PDF of each paper that is handed off. The Retrieval Mode block has one new line, "Full text obtained: [yes / partial / abstract only] via [source]". Query syntax and repository URLs were not re-reviewed for this change.
+- 2026-09-30 (re-audit): The PICO field "Time horizon / publication window" is now "Publication window", and a separate "Follow-up horizon" line uses the follow-up bands of `clinical-evidence-reviewer`, so the two meanings of "time horizon" no longer share one field. Query syntax and repository URLs were not re-reviewed for this change.
 
 ---
 

@@ -93,6 +93,8 @@ These are manual test prompts to verify each skill produces correct structured o
 - [ ] Skill recognizes this is a body-of-evidence question
 - [ ] Hands off to `clinical-evidence-reviewer`
 - [ ] Provides the extracted PICO as the hand-off payload
+- [ ] The PICO payload has Setting and Time horizon rows (follow-up band: short-term under 3 years, medium-term 3 to 5 years, long-term 5 years or more)
+- [ ] The hand-off says the reviewer fills the critical/important split of the outcomes
 
 ---
 
@@ -274,7 +276,7 @@ Fixture version: [`fixtures/iasella2003-ridge-preservation.md`](fixtures/iasella
 **Check:**
 - [ ] Retrieval Mode block declared first
 - [ ] Block has the line "Full text obtained: [yes / partial / abstract only] via [source]", filled in
-- [ ] PICO specified
+- [ ] PICO specified, with separate "Publication window" and "Follow-up horizon" lines
 - [ ] PubMed strategy with MeSH terms + free-text `[tiab]` synonyms, combined with AND/OR
 - [ ] Cochrane CENTRAL strategy with `#1`, `#2`, … numbered lines
 - [ ] EFP / AAP / EAO / ITI / ADA URL + search terms each given

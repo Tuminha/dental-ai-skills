@@ -67,6 +67,8 @@ Before writing a single evaluative word, extract and present these elements verb
 | **Comparator** | What was it compared to? Placebo, active control, no treatment, split-mouth contralateral site, historical control. |
 | **Outcomes (Primary)** | The main endpoint the study was designed to answer. |
 | **Outcomes (Secondary)** | All other reported endpoints. |
+| **Setting** | University clinic, specialist private practice, generalist private practice, community, or mixed. Operator skill level when stated. |
+| **Time horizon** | Follow-up band as `clinical-evidence-reviewer` defines it: short-term under 3 years, medium-term 3 to 5 years, long-term 5 years or more. State the longest follow-up reported. |
 
 ### 0B. Study Classification
 
@@ -124,7 +126,7 @@ Select the correct risk-of-bias instrument based on the study type and design st
 | Non-randomized interventional | **ROBINS-I** | Low / Moderate / Serious / Critical / No information, per domain + overall |
 | Cohort / case-control / cross-sectional | **Newcastle-Ottawa Scale** | Star-based rating (max 9 for cohort/case-control; 10 for cross-sectional) across Selection / Comparability / Outcome (or Exposure) |
 | Case series / case report | **JBI Critical Appraisal Checklist (correct sub-tool)** | Yes / No / Unclear / Not applicable, per item |
-| Diagnostic accuracy | **QUADAS-3 (preferred)** | Low / High / Unclear concern, separately for **risk of bias** *and* **applicability**, at the level of individual accuracy estimates. Use **QUADAS-2** only if the user requests legacy compatibility or the journal mandates it; if you use QUADAS-2, state that QUADAS-3 is now the current iteration. |
+| Diagnostic accuracy | **QUADAS-3 (preferred)**, Whiting et al., Ann Intern Med 2026, PMID 41698208; explanation and elaboration Davenport et al., PMID 41698205 | Low / High / Unclear concern, separately for **risk of bias** *and* **applicability**, at the level of individual accuracy estimates. Use **QUADAS-2** only if the user requests legacy compatibility or the journal mandates it; if you use QUADAS-2, state that QUADAS-3 is now the current iteration. |
 | Systematic review / meta-analysis | **AMSTAR 2** | Overall confidence in the results: **High / Moderate / Low / Critically low**, based on critical and non-critical weaknesses across 16 items. **Do not** produce a numeric AMSTAR 2 score — AMSTAR 2 is explicitly not designed for that. |
 | Animal in-vivo | **ARRIVE 2.0 (reporting)** + **SYRCLE RoB tool (risk of bias)** | ARRIVE: Reported / Partially reported / Not reported per item. SYRCLE: Yes / No / Unclear, per domain. |
 | In-vitro dental (materials, biomaterials, lab studies) | **CRIS checklist** + dental lab-specific validity audit | CRIS: Reported / Not reported per item. Audit: specimen randomization, blinding of assessors, sample-size justification, aging/fatigue simulation, standardization of test conditions, operator calibration, clinically relevant endpoints. |
@@ -222,7 +224,7 @@ Actively check each. Flag at the listed severity if present:
 |---|---|---|
 | Split-mouth / clustered data without clustering correction | 🔴 Critical | Paired analyses, GEE, or mixed models required; t-tests/chi-square on clustered data inflate significance. |
 | Implant success vs survival conflated | 🟡 Moderate | "Success" requires specific criteria (Albrektsson, Buser, Misch, or ICOI Pisa). "Survival" means the implant is still in the mouth. Papers reporting only survival but claiming success are misleading. |
-| Peri-implantitis definition inconsistent | 🟡 Moderate | Check against the 2017 World Workshop definition (bleeding/suppuration on probing + bone loss > 3 mm beyond physiologic remodeling and/or PD ≥ 6 mm). Idiosyncratic definitions break cross-study comparison. |
+| Peri-implantitis definition inconsistent | 🟡 Moderate | Check against the 2017 World Workshop case definition (Berglundh et al. 2018, J Clin Periodontol 45 Suppl 20, PMID 29926491; case definitions paper Renvert et al. 2018, PMID 29926496). With previous examination data, diagnosis needs all three: bleeding and/or suppuration on gentle probing, increased probing depth compared with previous examinations, and bone loss beyond crestal bone level changes from initial remodelling. Without previous data, all three: bleeding and/or suppuration on gentle probing, probing depth of 6 mm or more, and bone level 3 mm or more apical of the most coronal portion of the intra-osseous part of the implant. The three criteria are combined, never "and/or". Idiosyncratic definitions break cross-study comparison. |
 | Periodontitis case definition inconsistent | 🟡 Moderate | Check against the 2017 World Workshop staging/grading system. |
 | Short follow-up claimed as long-term | 🔴 Critical | For implant outcomes: < 3 yr = short-term; < 5 yr = medium-term; ≥ 5 yr = long-term. Flag < 3-yr data sold as long-term evidence. |
 | Funding source or funder role not reported | 🟡 Moderate | Reporting deficiency. Apply only when the full text was read. Check that the paper states the funding source and the funder's role in design, data collection, analysis, writing and the decision to publish. A paper with no disclosure statement gets the same tag. The tag is for the reporting gap. The existence of a relationship gets no severity tag (see Phase 7). |
@@ -281,7 +283,7 @@ For each major claim made in the Discussion or Conclusions, produce one row:
 Rules:
 - Claim with no corresponding result → mark **"UNSUPPORTED — no result presented"**.
 - Outcome the study was not powered for → mark **"UNDERPOWERED"**.
-- Clinical meaningfulness must reference accepted thresholds where they exist (e.g., 0.5 mm marginal bone level change is commonly used as a minimum clinically important difference for implant studies; ~1 mm CAL gain is a common MCID for periodontal regenerative outcomes).
+- Clinical meaningfulness must reference accepted thresholds where they exist. The 0.5 mm marginal bone level change often quoted for implant studies and the about 1 mm CAL gain often quoted for periodontal regenerative outcomes are contextual benchmarks, not validated MCIDs. Name the source of any threshold you apply (a validation study, a guideline, or the paper's own stated threshold) and label a threshold with no source as contextual. See `dental-statistical-forensics/references/clinical-thresholds-and-mcid.md`.
 - Flag any claim that extrapolates beyond the study population, follow-up duration, or intervention parameters.
 
 ---
@@ -319,7 +321,7 @@ Respond:
 
 > Single-paper credibility is not a clinical recommendation. To decide whether to change practice, the question must be evaluated against the full body of evidence using GRADE certainty per critical outcome, current guideline status, and patient-specific factors. Hand off to `clinical-evidence-reviewer` using the PICO extracted in Phase 0.
 
-Provide the extracted PICO as the hand-off payload.
+Provide the extracted PICO from table 0A as the hand-off payload, with Setting and Time horizon filled. The reviewer fills the critical/important split of the outcomes; this skill passes primary and secondary outcomes as extracted.
 
 ## Hand-Off to Dental Statistical Forensics
 
@@ -490,6 +492,7 @@ This skill must be re-reviewed when any of the following changes materially:
 - 2026-09-30: Conflict of interest removed from the Study Credibility Score. The score now has five domains (Design, Methods, Statistics, Bias, Citations) and a total of /15, with bands 13–15, 9–12, 5–8 and 0–4. Phase 7 reports funding and relationships and gives no score. The red flag on sponsorship became a reporting deficiency. Basis: Cochrane Handbook for Systematic Reviews of Interventions, version 6.5, chapter 7 (last updated August 2022), section 7.8.3, read on 2026-09-30. The other appraisal tools were not re-reviewed on this date.
 - 2026-09-30 (review follow-up): Phase 7 limits the permitted route to relationships that are declared in the paper or externally documented, financial, dated within the study period or the journal's stated disclosure period, and tied to a product under study or its maker. The explanation sentence covers the paper and the register. An abstract or excerpt gets "not in the supplied text" and no severity tag. A paper with no disclosure statement counts as a reporting gap. A native tool item on funding or conflict reporting is rated as the tool says. Basis: Cochrane Handbook, version 6.5, chapter 7, sections 7.8.3, 7.8.5 and 7.8.6, and the AMSTAR 2 paper (Shea et al., BMJ 2017;358:j4008, PMID: 28935701), items 10 and 16 and boxes 1 and 2, both read on 2026-09-30.
 - 2026-09-30 (full text): New section "Full text first" names `dental-paper-fetch` as the way to get the PDF before appraising. Phase 0 has a fourth table, "0D. Source text", and the output format has a "Source Text" block under Phase 0. It records whether the full text, part of it or only the abstract was read, the source, the license and whether supplements were read. No appraisal tool was re-reviewed for this change.
+- 2026-09-30 (re-audit): The Phase 6 red flag on the peri-implantitis definition now states the 2017 World Workshop case definition: with previous examination data, bleeding and/or suppuration on gentle probing, increased probing depth compared with previous examinations, and bone loss beyond crestal bone level changes from initial remodelling; without previous data, bleeding and/or suppuration on gentle probing, probing depth of 6 mm or more, and bone level 3 mm or more apical of the most coronal portion of the intra-osseous part of the implant; the three criteria combined, never "and/or". Basis: Berglundh et al. 2018, J Clin Periodontol 45 Suppl 20:S286-S291, PMID 29926491, full text read on 2026-09-30 (open-access copy obtained with `dental-paper-fetch`), and Renvert et al. 2018, PMID 29926496, abstract checked on PubMed the same day. Phase 9: the 0.5 mm marginal bone level and about 1 mm CAL figures are labelled contextual benchmarks, not validated MCIDs, with a pointer to `dental-statistical-forensics/references/clinical-thresholds-and-mcid.md`, and the model must name the source of any threshold it applies. Phase 1: QUADAS-3 cited (Whiting et al., Ann Intern Med 2026, PMID 41698208; Davenport et al., PMID 41698205; both checked on PubMed on 2026-09-30). Table 0A gained Setting and Time horizon rows, and the hand-off to `clinical-evidence-reviewer` says the reviewer fills the critical/important split. The other appraisal tools were not re-reviewed on this date.
 
 ---
 
