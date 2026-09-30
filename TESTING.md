@@ -491,6 +491,23 @@ The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the s
 - [ ] Anatomical accuracy disclaimer present
 - [ ] Output includes suggested uses
 
+**Script, no key needed:**
+```bash
+python3 dental-image-generator/scripts/generate_dental_image.py --help
+python3 dental-image-generator/scripts/generate_dental_image.py --prompt "Immediate implant placement in the aesthetic zone" --dry-run
+env -u OPENAI_API_KEY python3 dental-image-generator/scripts/generate_dental_image.py --prompt "x" --output /tmp/x.png; echo "exit $?"
+```
+- [ ] `--help` lists `--model`, `--size`, `--quality`, `--brand-asset` and `--dry-run`
+- [ ] `--dry-run` prints JSON with `url` `https://api.openai.com/v1/images/generations`, `model` `gpt-image-2.5-sunburst` and the clinical preset in front of the prompt; nothing is sent
+- [ ] Without `OPENAI_API_KEY` the run prints one sentence naming the variable and exits with code 2; no file is written
+- [ ] `python3 scripts/smoke_test_repo.py` passes `test_image_generator_cli_offline` and `test_image_generator_fake_api` (the fake Images API checks the request body, the bearer header and the saved bytes)
+
+**Script, live, paid, one image:**
+```bash
+python3 dental-image-generator/scripts/generate_dental_image.py --prompt "Cross-section of a healthy periodontium" --size 1024x640 --quality low --output /tmp/perio.png
+```
+- [ ] A 1024x640 PNG is written and the last lines print `created`, `size`, `quality`, `output_format` and the token usage (checked 2026-09-30: 13 seconds, 107 output tokens, 174 total tokens)
+
 ---
 
 ## Running These Tests

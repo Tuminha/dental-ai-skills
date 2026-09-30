@@ -7,6 +7,7 @@ in Claude Code, Codex, CI, or a minimal local checkout.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import importlib.util
 import io
@@ -24,6 +25,7 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PAPER_FETCH = "dental-paper-fetch/scripts/paper_fetch.py"
+IMAGE_SCRIPT = "dental-image-generator/scripts/generate_dental_image.py"
 PROTOCOL_VERSION = "2026.05.16"
 REQUIRED_SKILLS = {
     "dental-author-disclosures",
@@ -613,6 +615,150 @@ def test_paper_fetch_notice_pdf() -> None:
             fail("a two-page PDF must be saved as before")
 
 
+# ---------- generate_dental_image.py, tested offline with a fake Images API ----------
+
+def env_without_key() -> dict[str, str]:
+    return {name: value for name, value in os.environ.items() if name != "OPENAI_API_KEY"}
+
+
+def test_image_generator_cli_offline() -> None:
+    """--help and --dry-run need no key; a missing key is one sentence and exit code 2."""
+    env = env_without_key()
+    helped = run([sys.executable, IMAGE_SCRIPT, "--help"], env=env)
+    for flag in ("--model", "--size", "--quality", "--brand-asset", "--dry-run"):
+        if flag not in helped.stdout:
+            fail(f"image generator --help must list {flag}")
+    if "OPENAI_API_KEY" not in helped.stdout:
+        fail("image generator --help must name OPENAI_API_KEY")
+
+    dry = run([sys.executable, IMAGE_SCRIPT, "--prompt", "Healthy periodontium", "--style", "infographic",
+               "--size", "1536x1024", "--quality", "low", "--output", "x.webp", "--dry-run"], env=env)
+    request = json.loads(dry.stdout)
+    body = request["body"]
+    if request["url"] != "https://api.openai.com/v1/images/generations":
+        fail("dry run must target the generations endpoint")
+    if body["model"] != "gpt-image-2.5-sunburst" or body["size"] != "1536x1024" or body["quality"] != "low":
+        fail("dry run body does not carry the model, size and quality")
+    if body["output_format"] != "webp" or not body["prompt"].startswith("Design a clean dental infographic"):
+        fail("dry run body must derive the format from the file name and prefix the style preset")
+    if not body["prompt"].endswith("Subject: Healthy periodontium") or body["n"] != 1:
+        fail("dry run body must end with the user prompt and ask for one image")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = pathlib.Path(tmp) / "no-key.png"
+        missing = subprocess.run([sys.executable, IMAGE_SCRIPT, "--prompt", "x", "--output", str(target)],
+                                 cwd=ROOT, text=True, capture_output=True, env=env)
+        lines = missing.stdout.strip().splitlines()
+        if missing.returncode != 2 or len(lines) != 1 or "OPENAI_API_KEY" not in lines[0]:
+            fail("a missing key must print one sentence naming OPENAI_API_KEY and exit 2")
+        if target.exists():
+            fail("a missing key must not write an output file")
+
+
+class FakeImagesApi:
+    """Stands in for urlopen inside generate_dental_image.py. Records every request and answers
+    with one fixed image, or raises the given error. Nothing reaches the network."""
+
+    def __init__(self, image_bytes: bytes) -> None:
+        self.image_bytes = image_bytes
+        self.answer: object = None
+        self.requests: list[tuple[str, dict[str, str], dict]] = []
+
+    def __call__(self, request, timeout: float = 0) -> io.BytesIO:
+        self.requests.append((request.full_url, dict(request.header_items()),
+                              json.loads(request.data.decode("utf-8"))))
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        answer = self.answer or {
+            "created": 1, "size": "1024x1024", "quality": "low", "output_format": "png",
+            "data": [{"b64_json": base64.b64encode(self.image_bytes).decode("ascii")}],
+            "usage": {"output_tokens": 5, "total_tokens": 9},
+        }
+        return io.BytesIO(json.dumps(answer).encode("utf-8"))
+
+
+def load_image_generator(fake: FakeImagesApi):
+    """Load generate_dental_image.py as a fresh module whose urlopen is the fake."""
+    keep = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location("image_generator_under_test", ROOT / IMAGE_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = keep
+    module.urlopen = fake
+    return module
+
+
+def test_image_generator_fake_api() -> None:
+    """Request body, headers and the saved file, checked against a fake Images API."""
+    pixels = b"\x89PNG\r\n\x1a\nfake-image-bytes"
+    key = "test-key-not-real"
+    fake = FakeImagesApi(pixels)
+    module = load_image_generator(fake)
+    kept = os.environ.get("OPENAI_API_KEY")
+    os.environ["OPENAI_API_KEY"] = key
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = pathlib.Path(tmp)
+            asset = folder / "logo.png"
+            asset.write_bytes(pixels)
+            output = folder / "out" / "implant.png"
+            code, text = printed(module.main, ["--prompt", "Implant cross-section", "--quality", "low",
+                                               "--size", "1024x640", "--output", str(output)])
+            if code != 0 or output.read_bytes() != pixels:
+                fail("a generation must exit 0 and write the decoded image bytes")
+            if key in text:
+                fail("the API key must never be printed")
+            url, headers, body = fake.requests[0]
+            if url != module.GENERATIONS_URL or headers.get("Authorization") != f"Bearer {key}":
+                fail("the generation must go to the generations endpoint with a bearer key")
+            if (body["model"] != module.DEFAULT_MODEL or body["size"] != "1024x640" or body["quality"] != "low"
+                    or body["output_format"] != "png" or body["n"] != 1 or "images" in body):
+                fail(f"unexpected generation body: {body}")
+            if not body["prompt"].startswith("Create a professional medical/clinical illustration") \
+                    or not body["prompt"].endswith("Subject: Implant cross-section"):
+                fail("the clinical preset must wrap the user prompt")
+
+            branded = folder / "branded.jpg"
+            code, _ = printed(module.main, ["--prompt", "Post-op care", "--style", "patient-friendly",
+                                            "--brand-asset", str(asset), "--output", str(branded)])
+            url, _, body = fake.requests[1]
+            if code != 0 or branded.read_bytes() != pixels or url != module.EDITS_URL:
+                fail("a brand asset must route the request to the edits endpoint and still save the image")
+            expected = "data:image/png;base64," + base64.b64encode(pixels).decode("ascii")
+            if body.get("images") != [{"image_url": expected}] or body["output_format"] != "jpeg":
+                fail(f"the brand asset must travel as a data URL and .jpg must mean jpeg: {body}")
+            if "brand asset" not in body["prompt"] or not body["prompt"].startswith("Create a friendly"):
+                fail("the brand note must follow the patient-friendly preset")
+
+            module.MAX_ASSET_BYTES = len(pixels) - 1
+            sent = len(fake.requests)
+            code, text = printed(module.main, ["--prompt", "x", "--brand-asset", str(asset),
+                                               "--output", str(folder / "big.png")])
+            module.MAX_ASSET_BYTES = 15_000_000
+            if code != 1 or "under 0 MB" not in text or len(fake.requests) != sent or (folder / "big.png").exists():
+                fail("an oversized brand asset must exit 1 before any request and write nothing")
+
+            fake.answer = {"created": 2, "data": []}
+            code, text = printed(module.main, ["--prompt", "x", "--output", str(folder / "empty.png")])
+            if code != 1 or "no image" not in text or (folder / "empty.png").exists():
+                fail("an answer without an image must exit 1 and write nothing")
+
+            fake.answer = urllib.error.HTTPError(
+                module.GENERATIONS_URL, 400, "Bad Request", {},
+                io.BytesIO(b'{"error": {"message": "Invalid size 16x16 for ' + key.encode() + b'"}}'))
+            code, text = printed(module.main, ["--prompt", "x", "--size", "16x16", "--output", str(folder / "bad.png")])
+            if code != 1 or "HTTP 400" not in text or "Invalid size 16x16" not in text or key in text:
+                fail("an API error must exit 1, quote the message and mask the key")
+    finally:
+        if kept is None:
+            del os.environ["OPENAI_API_KEY"]
+        else:
+            os.environ["OPENAI_API_KEY"] = kept
+
+
 TESTS = [
     test_required_skills_present,
     test_skill_frontmatter_validator,
@@ -621,6 +767,8 @@ TESTS = [
     test_statistical_forensics_references_exist,
     test_examples_and_artifact_renderer,
     test_helper_scripts,
+    test_image_generator_cli_offline,
+    test_image_generator_fake_api,
     test_paper_fetch_offline,
     test_paper_fetch_version_folder,
     test_paper_fetch_webp_figures,
