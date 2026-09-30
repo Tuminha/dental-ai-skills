@@ -9,7 +9,7 @@ description: >-
 
 # Dental Author Disclosures
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 **Methodology Review Date:** 2026-09-30 (added step 0 on the reviewer's own relationships, "Sharing, sources and retention", the expanded source standard with the ICMJE 36-month window, and the register hand-off as a report section table; earlier the same day "How relationships inform appraisal" and "Full text first"; previous review 2026-09-27)
 
 ## Scope

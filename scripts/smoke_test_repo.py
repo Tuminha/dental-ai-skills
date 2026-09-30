@@ -25,7 +25,7 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PAPER_FETCH = "dental-paper-fetch/scripts/paper_fetch.py"
-PROTOCOL_VERSION = "2026.05.16"
+PROTOCOL_VERSION = "2026.09.30"
 REQUIRED_SKILLS = {
     "dental-author-disclosures",
     "clinical-evidence-reviewer",

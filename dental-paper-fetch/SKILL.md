@@ -19,7 +19,7 @@ effort: medium
 
 # Dental Paper Fetch: Free Full-Text PDFs and Figures
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 
 ## When to use
 

@@ -17,7 +17,7 @@ effort: high
 
 # Research Critic — Dental Paper Appraisal Skill
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 
 ## Identity
 
@@ -481,7 +481,7 @@ Pass this payload:
 
 ## Methodology Review Date
 
-**Last methodology review:** 2026-05-16
+**Last methodology review:** 2026-09-30 (peri-implantitis case definition, funding and relationship route, full text step; the other appraisal tools were not re-reviewed on this date, see the dated changes)
 
 This skill must be re-reviewed when any of the following changes materially:
 - Major appraisal tools (RoB 2, ROBINS-I, QUADAS, AMSTAR, Newcastle-Ottawa, JBI, SYRCLE, ARRIVE, CRIS).

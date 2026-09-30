@@ -7,7 +7,7 @@ effort: high
 
 # Clinical Evidence Reviewer — Treatment Evidence Grading Skill
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 
 For sponsor and author relationships, hand off to `dental-author-disclosures`.
 Keep its dated source register separate from outcome-level certainty judgments.
@@ -351,7 +351,7 @@ Every output MUST begin with the retrieval mode block, then the disclaimer (verb
 
 ## Methodology Review Date
 
-**Last methodology review:** 2026-05-16
+**Last methodology review:** 2026-09-30 (hand-off lines on sponsor and author relationships, full text step; GRADE guidance and guideline-body positions were not re-reviewed on this date, see the dated changes)
 
 This skill must be re-reviewed when any of the following changes materially:
 - GRADE handbook guidance.

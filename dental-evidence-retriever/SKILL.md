@@ -7,7 +7,7 @@ effort: high
 
 # Dental Evidence Retriever — Literature Search Workflow
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 
 ## Identity
 
