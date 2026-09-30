@@ -178,12 +178,14 @@ in the library. A PDF is identified in this order, and the tool never guesses:
    5-year and a 10-year follow-up, Part I and Part II are different papers; "five", "5"
    and "V" are the same number), on the year (within one year) and on the first surname
    of the author (without accents or initials), and both or neither are a comment, reply,
-   letter, erratum or correction about a paper. A name with neither a year nor an author
-   is taken only when exactly one paper passes; two papers with the same title (a
-   consensus report printed in two journals) are refused and both named, so a plain-title
-   file is safest with a `[PMID n]` or `[DOI ...]` tag in its name. Otherwise the file is
-   `NO_MATCH`, the closest title and the reason are printed, and the file stays where it
-   is for a person to look at.
+   letter, erratum or correction about a paper. The paper is taken only when exactly one
+   passes: a consensus report printed in two journals, with the same title, year and
+   first author, is refused and both are named, so add a `[PMID n]` or `[DOI ...]` tag
+   to the name to say which one. An older PubMed record without a DOI and its Crossref
+   twin count as one paper. A roman numeral counts as a number only after Part, Chapter,
+   Class, Type, Phase, Volume, Stage or Grade ("v" between two treatments is "versus").
+   Otherwise the file is `NO_MATCH`, the closest title and the reason are printed, and
+   the file stays where it is for a person to look at.
 
 `--topic-from-parent` files each PDF under the name of its parent folder, so the topic
 folders of an existing collection carry over. A file whose bytes are already in the index
@@ -398,7 +400,10 @@ Re-review this skill when any of the following changes materially:
   named "Comment on X" is not filed under X); a name with neither year nor author needs
   exactly one passing paper; number words and roman numerals count as numbers; Zotero's
   `<author> - <year> - <title>` names are read; only the first surname of the author
-  counts.
+  counts. Round 3: the file is refused whenever more than one paper passes, whatever the
+  name carries (the two-journal consensus report with year and author); an older PubMed
+  record without a DOI and its Crossref twin count as one; roman numerals count only
+  after Part, Chapter, Class, Type, Phase, Volume, Stage or Grade.
 
 ---
 

@@ -873,7 +873,11 @@ def test_paper_fetch_title_guard() -> None:
                  "Example et al. - 2020 - Invented zotero style paper.pdf",
                  "2020 - Example - Invented five-year results of something.pdf",
                  "2020 - Lindhe and Example - Invented sound paper about bone levels.pdf",
-                 "2020 - Example, Lindhe - Invented sound paper about bone levels.pdf"]
+                 "2020 - Example, Lindhe - Invented sound paper about bone levels.pdf",
+                 # round 3 of the review
+                 "Example et al. - 2018 - Invented consensus report on peri-implant diseases.pdf",
+                 "2020 - Example - Invented classic paper on bone.pdf",
+                 "2020 - Example - Invented short implants v long implants.pdf"]
         for n, name in enumerate(names):
             (source / name).write_bytes(f"%PDF-1.4 invented file {n}\n".encode())
         before = sorted(f.name for f in source.iterdir())
@@ -888,11 +892,19 @@ def test_paper_fetch_title_guard() -> None:
                    "pubdate": "2018 Jun", "authors": [{"name": "Example A"}],
                    "articleids": [{"idtype": "pubmed", "value": pmid}]}
             for pmid, journal in (("2107", "Invented J"), ("2108", "Other Invented J"))}}}).encode()
+        classic = {"message": {"items": [{"DOI": "10.1234/classic.2112", "title": ["Invented classic paper on bone"],
+                                          "issued": {"date-parts": [[2020]]}, "author": [{"family": "Example"}],
+                                          "container-title": ["Invented J"]}]}}
         papers = pathlib.Path(tmp) / "papers"
         pf = load_paper_fetch(papers, [
+            ("Invented+classic+paper+on+bone%5Bti%5D", pubmed_found("2112")),
+            ("id=2112", pubmed_summary("2112", "Invented classic paper on bone")),
+            ("query.bibliographic=Invented+classic+paper+on+bone", json.dumps(classic).encode()),
+            ("Invented+short+implants", pubmed_found("2113")),
+            ("id=2113", pubmed_summary("2113", "Invented short implants versus long implants")),
             ("Invented+reply+target", pubmed_found("2106")),
             ("id=2106", pubmed_summary("2106", "Invented reply target paper with a fairly long title about implants")),
-            ("Invented+consensus+report", pubmed_found("2107", "2108")),
+            ("Invented+consensus+report+on+peri-implant+diseases%5Bti%5D", pubmed_found("2107", "2108")),
             ("id=2107%2C2108", twins),
             ("Invented+single+plain+title", pubmed_found("2109")),
             ("id=2109", pubmed_summary("2109", "Invented single plain title paper")),
@@ -921,7 +933,7 @@ def test_paper_fetch_title_guard() -> None:
         args = types.SimpleNamespace(files=[str(source.parent)], topic=None, topic_from_parent=True, days=1,
                                      move=False, yes=False, dry_run=False, no_figures=True)
         code, text = printed(pf.cmd_import, args)
-        expected = "IMPORTED 6 | EXISTS 1 | DUPLICATE_BYTES 0 | NO_MATCH 8 | NO_DOI 0"
+        expected = "IMPORTED 8 | EXISTS 1 | DUPLICATE_BYTES 0 | NO_MATCH 9 | NO_DOI 0"
         if code != 2 or text.strip().splitlines()[-1] != expected:
             fail(f"title guard: expected exit 2 and {expected!r}, got {code}: {text}")
         for reason in ("the numbers differ: 1 in the name, 2 in its title",
@@ -931,14 +943,18 @@ def test_paper_fetch_title_guard() -> None:
                        "the year 2015 in the name is not within a year of 2020",
                        "the first author Other in the name is not Example",
                        "the first author Lindhe and Example in the name is not Example",
-                       "2 papers carry this title and the name gives no year or first author to tell them apart: "
-                       'PMID 2107 "Invented consensus report on peri-implant diseases"; PMID 2108 "Invented consensus '
-                       'report on peri-implant diseases"; a plain-title file needs a [PMID n] or [DOI ...] tag'):
+                       '2 papers pass for this name: PMID 2107 "Invented consensus report on peri-implant diseases" '
+                       '(Invented J 2018); PMID 2108 "Invented consensus report on peri-implant diseases" (Other Invented J '
+                       "2018); add a [PMID n] or [DOI ...] tag to the name to say which one"):
             if reason not in text:
                 fail(f"a refused sibling record must say why: {reason!r} missing in: {text}")
+        if text.count("2 papers pass for this name") != 2:
+            fail("the twin-journal refusal must fire for the plain-title name AND for the Zotero name with year and author")
         saved = sorted(f.name for f in (papers / "Bone levels").iterdir() if f.suffix == ".pdf")
         if saved != ["2020 Example - Comment on Invented long report on marginal bone level changes around implants i - Invented J [PMID 2103].pdf",
                      "2020 Example - Invented 5-year results of something - Invented J [PMID 2111].pdf",
+                     "2020 Example - Invented classic paper on bone - Invented J [PMID 2112].pdf",
+                     "2020 Example - Invented short implants versus long implants - Invented J [PMID 2113].pdf",
                      "2020 Example - Invented single plain title paper - Invented J [PMID 2109].pdf",
                      "2020 Example - Invented sound paper about bone levels - Invented J [PMID 2104].pdf",
                      "2020 Example - Invented zotero style paper - Invented J [PMID 2110].pdf",
@@ -946,6 +962,9 @@ def test_paper_fetch_title_guard() -> None:
             fail(f"unexpected set of imported files: {saved!r}")
         if "EXISTS  " not in text or "(left 2020 - Example, Lindhe - Invented sound paper about bone levels.pdf" not in text:
             fail(f"a name whose first surname agrees must reach the EXISTS check, got: {text}")
+        row = next(r for r in pf.index_rows() if r["pmid"] == "2112")
+        if row["doi"] != "10.1234/classic.2112":
+            fail(f"a PubMed paper without a DOI must take the DOI of its Crossref twin, got {row!r}")
         if sorted(f.name for f in source.iterdir()) != before:
             fail("the title guard must never delete or move a source file")
         if not any("retmax=3" in c for c in pf.http_get.calls) or not any("rows=3" in c for c in pf.http_get.calls):
@@ -960,8 +979,9 @@ def test_paper_fetch_title_guard() -> None:
                 or pf.same_author("Other", "Example") or pf.same_author("", "Example"):
             fail("same_author must compare the first surname only, without case, accents or initials")
         if pf.title_numbers("Outcomes after 10 years, Part II") != [2, 10] or pf.title_numbers("five-year Part V") != [5, 5] \
-                or pf.title_numbers("Part IV and part 4") != [4, 4]:
-            fail("title_numbers must read digits, number words and roman numerals as numbers")
+                or pf.title_numbers("Part IV and part 4") != [4, 4] or pf.title_numbers("short implants v long implants") != [] \
+                or pf.title_numbers("Stage III periodontitis, grade C") != [3]:
+            fail("title_numbers must read digits, number words, and roman numerals only after Part, Stage and the like")
 
 
 def test_paper_fetch_library_commands() -> None:

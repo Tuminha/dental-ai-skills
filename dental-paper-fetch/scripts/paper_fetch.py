@@ -1119,6 +1119,9 @@ NUMBER_WORDS = {w: n for n, w in enumerate("zero one two three four five six sev
                                            "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split())}
 NUMBER_WORDS.update(thirty=30, forty=40, fifty=50, sixty=60, seventy=70, eighty=80, ninety=90, hundred=100)
 ROMAN = re.compile(r"^(x{0,3})(ix|iv|v?i{0,3})$")
+# "i", "v" and "x" are roman numerals only after one of these words: "short implants v
+# long implants" means versus, "Stage III" and "Part IV" mean 3 and 4
+ROMAN_AFTER = {"part", "chapter", "class", "type", "phase", "volume", "vol", "stage", "grade"}
 # A title that starts like this is about a paper (a comment, reply, letter or correction),
 # not the paper; "Comment on", "Erratum", "Corrigendum" and "Retraction" anywhere say the same
 SIDE_NOTE = re.compile(r"(?i)^\W*(?:(?:comment|commentary|reply|response|letter|erratum|corrigendum|correction|"
@@ -1145,15 +1148,17 @@ def title_in_name(stem):
 def title_numbers(title):
     """The numbers in a title, sorted, with number words and roman numerals read as numbers:
     "5-year", "five-year" and "Part V" all give 5, so 5 and 10 tell a 5-year from a 10-year
-    follow-up and 1 and 2 tell Part I from Part II. Two titles that read alike but differ
-    here belong to two papers."""
+    follow-up and 1 and 2 tell Part I from Part II. A roman numeral counts only after Part,
+    Chapter, Class, Type, Phase, Volume, Stage or Grade. Two titles that read alike but
+    differ here belong to two papers."""
     numbers = []
-    for w in re.findall(r"[a-z0-9]+", title.lower()):
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    for before, w in zip([""] + words, words):
         if w.isdigit():
             numbers.append(int(w))
         elif w in NUMBER_WORDS:
             numbers.append(NUMBER_WORDS[w])
-        elif ROMAN.match(w) and w:
+        elif before in ROMAN_AFTER and ROMAN.match(w):
             tens, units = ROMAN.match(w).groups()
             numbers.append(10 * len(tens) + {"": 0, "i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5,
                                              "vi": 6, "vii": 7, "viii": 8, "ix": 9}[units])
@@ -1193,10 +1198,19 @@ def disagreement(title, year, author, cand):
 
 def title_candidates(title):
     """Up to three PubMed papers and three Crossref records whose title is close to the one
-    given, PubMed first, no DOI twice."""
+    given, PubMed first, no DOI twice. A Crossref record that is the twin of a PubMed paper
+    without a DOI (an older paper: the same title, the year within one, the same first
+    surname) gives that paper its DOI instead of standing beside it as a second candidate."""
     candidates = pubmed_papers(pubmed_search(f"{title}[ti]", 3)[0])
     for r in crossref_records(title):
-        if not any(p["doi"] == r["doi"] for p in candidates):
+        if any(p["doi"] == r["doi"] for p in candidates):
+            continue
+        twin = next((p for p in candidates if not p["doi"] and similarity(p["title"], r["title"]) > TITLE_MATCH
+                     and p["year"].isdigit() and r["year"].isdigit() and abs(int(p["year"]) - int(r["year"])) <= 1
+                     and same_author(r["first_author"], p["first_author"])), None)
+        if twin:
+            twin["doi"] = r["doi"]
+        else:
             candidates.append(r)
     return candidates
 
@@ -1204,11 +1218,12 @@ def title_candidates(title):
 def match_title(title, year="", author=""):
     """(paper, "") for the one candidate that reads like the file name above TITLE_MATCH AND
     agrees with it on its kind, the numbers in the title, the year and the first author.
-    A name with neither a year nor an author is taken only when exactly one candidate
-    passes: two papers with the same title (a consensus report printed in two journals)
-    are NO_MATCH, both named. (None, note) names the closest candidate and why it was
-    not taken; (None, "") when nothing was found at all. A Crossref record is looked up
-    in PubMed and OpenAlex when chosen, so it carries a PMID and PMCID when it has them."""
+    The paper is taken only when exactly one candidate passes: two papers that both pass
+    (a consensus report printed in two journals, with the same title, year and first
+    author) are NO_MATCH, every one named, and the file needs a tag. (None, note) names
+    the closest candidate and why it was not taken; (None, "") when nothing was found at
+    all. A Crossref record is looked up in PubMed and OpenAlex when chosen, so it carries
+    a PMID and PMCID when it has them."""
     passing, closest, closest_score, refused = [], None, 0.0, ""
     for cand in title_candidates(title):
         score = similarity(title, cand["title"])
@@ -1221,12 +1236,12 @@ def match_title(title, year="", author=""):
             refused = refused or f'closest title found: "{cand["title"]}" ({score:.2f} of 1.00) but {why}'
             continue
         passing.append((score, cand))
-    if len(passing) > 1 and not year and not author:
-        names = "; ".join(f'{"PMID " + c["pmid"] if c["pmid"] else "DOI " + c["doi"]} "{c["title"]}"'
-                          for _, c in passing)
-        return None, (f"{len(passing)} papers carry this title and the name gives no year or first author "
-                      f"to tell them apart: {names}; a plain-title file needs a [PMID n] or [DOI ...] tag")
-    best = max(passing, key=lambda sc: sc[0])[1] if passing else None
+    if len(passing) > 1:
+        names = "; ".join(f'{"PMID " + c["pmid"] if c["pmid"] else "DOI " + c["doi"]} "{c["title"]}" '
+                          f'({c["journal"] or "journal unknown"} {c["year"] or "year unknown"})' for _, c in passing)
+        return None, (f"{len(passing)} papers pass for this name: {names}; add a [PMID n] or [DOI ...] tag "
+                      f"to the name to say which one")
+    best = passing[0][1] if passing else None
     if best:
         if not best["pmid"]:
             best = resolve_doi(best["doi"]) or best
