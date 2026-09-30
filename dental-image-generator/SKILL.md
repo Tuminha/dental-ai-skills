@@ -1,13 +1,13 @@
 ---
 name: dental-image-generator
-description: Use when the user asks to generate dental clinical illustrations, patient infographics, branded dental visuals, surgical diagrams, anatomy comparisons, post-op visual instructions, or social media graphics using the included Gemini image-generation workflow.
+description: Use when the user asks to generate dental clinical illustrations, patient infographics, branded dental visuals, surgical diagrams, anatomy comparisons, post-op visual instructions, or social media graphics using the included OpenAI image-generation script.
 when_to_use: User asks to generate or plan dental visuals, implant or periodontal illustrations, patient handout images, infographics, procedure diagrams, branded clinic visuals, or image-generation prompts/scripts for dental education.
 effort: high
 ---
 
 # Dental Image Generator — AI Clinical Illustration Skill
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 
 ## Identity
 
@@ -15,28 +15,22 @@ You generate clinical illustrations, patient infographics, and branded dental vi
 
 ## Setup
 
-This skill uses **Google Gemini 2.0 Flash** for image generation.
+This skill uses **OpenAI's Images API** with the model `gpt-image-2.5-sunburst` by default. OpenAI's image-generation guide names it as the model for work where editing precision matters, and the brand-asset option below uses the editing route. It is a **paid API**: OpenAI bills each image by output tokens, and the current rates are on its pricing page. The model id, the size rules and the quality values were checked live on 2026-09-30 against the API and the guide at https://developers.openai.com/api/docs/guides/image-generation.
 
 ### Get Your API Key (2 minutes)
 
-1. Go to **[https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)**
-2. Sign in with your Google account
-3. Click **"Create API Key"**
-4. Copy the key
+1. Go to **[https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)**
+2. Sign in and click **"Create new secret key"**
+3. Copy the key. OpenAI may ask you to complete API Organization Verification in the developer console before the key can use the GPT Image models (https://developers.openai.com/api/docs/guides/image-generation, read 2026-09-30).
 
 ```bash
 # Add to your shell profile (~/.zshrc, ~/.bashrc)
-export GEMINI_API_KEY="your-api-key-here"
+export OPENAI_API_KEY="your-api-key-here"
 ```
-
-Free tier: 15 requests/minute for Gemini 2.0 Flash experimental.
 
 ### Install Dependencies
 
-```bash
-pip install -r requirements.txt
-# or: pip install google-genai Pillow
-```
+None. The script uses only the Python standard library (Python 3.10 or newer).
 
 ---
 
@@ -45,11 +39,26 @@ pip install -r requirements.txt
 ### Command Line
 
 ```bash
-python scripts/generate_dental_image.py \
+python3 scripts/generate_dental_image.py \
   --prompt "Your description here" \
   --style clinical \
   --output output.png
 ```
+
+`--help` and `--dry-run` work without a key. A real run without `OPENAI_API_KEY` prints one sentence and exits with code 2. Nothing is printed that contains the key.
+
+### Options
+
+| Option | Default | Notes |
+|--------|---------|-------|
+| `--prompt`, `-p` | required | What to illustrate |
+| `--style`, `-s` | `clinical` | `clinical`, `patient-friendly` or `infographic`; each preset is a prefix on the prompt |
+| `--output`, `-o` | `output.png` | `.png`, `.jpg` or `.webp` picks the output format |
+| `--model`, `-m` | `gpt-image-2.5-sunburst` | Any OpenAI image model id, for example `gpt-image-2.5-flare` or `gpt-image-2` |
+| `--size` | `1024x1024` | `1536x1024` (landscape) and `1024x1536` (portrait) are the other standard sizes. Custom `WIDTHxHEIGHT`: both edges multiples of 16, aspect between 1:3 and 3:1, 655,360 to 8,294,400 pixels in total |
+| `--quality`, `-q` | `medium` | `low`, `medium`, `high`, `xhigh`, `max` or `auto`; `low` is the cheapest draft setting |
+| `--brand-asset`, `-b` | none | A clinic asset (png, jpg or webp) sent as an input image, see below |
+| `--dry-run` | off | Print the request as JSON and exit without calling the API |
 
 ### Style Presets
 
@@ -59,19 +68,19 @@ python scripts/generate_dental_image.py \
 | `patient-friendly` | Soft, calming palette — simple shapes, reassuring, no scary imagery | Post-op handouts, waiting room posters, patient education |
 | `infographic` | Modern layout — numbered steps, icons, clear hierarchy | Social media, educational carousels, quick-reference guides |
 
-### Brand Extraction
+### Brand Reference
 
-The script can extract your clinic's visual identity from any existing asset:
+Give the script your clinic's logo, brochure or business card and the model matches its colours and design style:
 
 ```bash
-python scripts/generate_dental_image.py \
+python3 scripts/generate_dental_image.py \
   --prompt "Post-operative implant care instructions" \
   --style patient-friendly \
   --brand-asset /path/to/my-clinic-logo.png \
   --output branded-instructions.png
 ```
 
-**What it extracts:** primary/secondary colors, typography style, design feel (modern/classic/playful/clinical), recurring patterns.
+**How it works:** the asset goes to the Images API edits endpoint as an input image (png, jpg or webp, under 15 MB: it travels inline as base64 and the API caps that at 20,971,520 characters), with a note in the prompt to reuse its palette, typography feel and overall style without copying the asset itself. There is no separate text-analysis step. Input images add input tokens to the bill.
 
 ---
 
@@ -138,6 +147,14 @@ Two columns, checkmarks and X marks, professional but approachable."
 ## Important
 
 **Always review AI-generated medical illustrations for anatomical accuracy before clinical use.**
+
+## Methodology Review Date
+
+**Last review:** 2026-09-30
+
+- 2026-09-30: Moved from Google Gemini to OpenAI's Images API. The old script pinned `gemini-2.0-flash-exp`; Google's deprecations page (https://ai.google.dev/gemini-api/docs/deprecations, read 2026-09-30) lists `gemini-2.0-flash` as shut down on 1 June 2026 and has no row for the `-exp` id, so the script could no longer run. The new script is standard library only, defaults to `gpt-image-2.5-sunburst`, adds `--model`, `--size`, `--quality` and `--dry-run`, and sends a brand asset as an input image to the edits endpoint instead of running a text analysis first. Model id, size rules and quality values checked live against the API and OpenAI's image-generation guide on that date. The free-tier rate claim was removed; the API is paid.
+
+Re-review this skill when OpenAI's image models page retires `gpt-image-2.5-sunburst` or lists a newer default, or when the Images API changes its size or quality rules.
 
 ---
 

@@ -21,7 +21,7 @@ effort: medium
 
 # Dental Paper Fetch: Free Full-Text PDFs and Figures
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 
 ## When to use
 
@@ -29,13 +29,12 @@ Use this skill when an answer depends on something the abstract does not give: m
 full results, tables, figures, flow charts, limitations, funding and disclosure statements,
 supplementary numbers. Do not answer those from the abstract when a free full text exists.
 
-Four skills in this repository have a "Full text first" step that names this skill:
+Five skills in this repository have a "Full text first" step that names this skill:
 
 - `research-critic`, before appraising a single paper.
 - `clinical-evidence-reviewer` and `dental-evidence-retriever`, for each key study.
+- `dental-statistical-forensics`, before auditing the numbers of a paper.
 - `dental-author-disclosures`, to read the paper's own funding and disclosure statements.
-
-Use it as well before `dental-statistical-forensics` audits the numbers of a paper.
 
 This skill downloads and files papers. It does not appraise them.
 
@@ -133,10 +132,6 @@ Each `get` or `search --download` run ends with one count line, for example
 `SAVED 12: PubMed Central 10, OpenAlex 2 | OPEN_MANUALLY 8 | NO_FREE_COPY 20`. `EXISTS` and
 `NOT_FOUND` counts appear when they happened. Report this line to the user. A source with
 0 saves in a large run is worth a look, for example CORE with a key set.
-
-One known case on 2026-09-30: a university repository answered with a one-page PDF that
-said the full text is not available. The tool printed `SAVED`. The size on the line was
-15 KB. A very small file is a reason to check page 1.
 
 | Exit code | Meaning |
 |---|---|
@@ -276,34 +271,43 @@ before anything is published.
   PubMed lists no DOI for a PMID, the PMID goes to OpenAlex, which supplies the DOI and the
   open-access locations of that record.
 
-## Sources evaluated on 2026-09-29
+## Sources evaluated on 2026-09-29 and 2026-09-30
 
-Coverage was measured on periodontology and implant papers from PubMed, with the version
-of the tool that existed before this public one. That version used a browser-style
-identity on publisher sites. This public version has not been measured on a full sample.
+Coverage was measured on periodontology and implant papers from PubMed. The runs of
+2026-09-27 and 2026-09-29 used the version of the tool that existed before this public
+one, with a browser-style identity on publisher sites. The run of 2026-09-30 used this
+public tool, with its one honest User-Agent, on the same 40 papers as the day before.
 In a probe of 7 open-access hosts, the honest identity got a PDF on 4 and the
 browser-style identity on 3.
 
-| Result | 100 papers, 2026-09-27 | 40 papers, 2026-09-29 |
-|---|---|---|
-| Downloaded automatically | 33 | 12 |
-| Free, but the site refused the script | 13 | 8 |
-| No free copy | 54 | 20 |
+| Result | 100 papers, 2026-09-27, private tool | 40 papers, 2026-09-29, private tool | Same 40 papers, 2026-09-30, public tool |
+|---|---|---|---|
+| Downloaded automatically (`SAVED`) | 33 | 12 | 19 |
+| Free, but the site refused the script (`OPEN_MANUALLY`) | 13 | 8 | 6 |
+| No free copy (`NO_FREE_COPY`) | 54 | 20 | 15 |
 
-About 30 of every 100 periodontology and implant papers download automatically. Most of
-the rest are paywalled. The two runs agree, but the 40 papers came in runs of neighbouring
-PubMed ids, so the match could be luck. A new run of 100 papers would settle it.
+The 6 and 15 in the 2026-09-30 column were counted before the doi.org resolver change
+that ships in this version. Two of the 6 were paywalled papers that only looked free
+through an OpenAIRE resolver link (PMIDs 32040899 and 32040897). Run on those two papers
+on 2026-09-30, the tool as shipped reports both as `NO_FREE_COPY`, so on the same 40
+papers it gives `OPEN_MANUALLY` 4 and `NO_FREE_COPY` 17. `SAVED` 19 does not change: the
+one OpenAIRE save came from a university repository, not from a resolver link.
+
+Between 30 and 48 of every 100 periodontology and implant papers download automatically,
+in two samples of 100 and 40 papers. Most of the rest are paywalled. The 40 papers came in
+runs of neighbouring PubMed ids, not a random draw, so the higher figure could be luck. A
+fresh 100-paper run with the public tool is still to do.
 
 Where the downloads came from:
 
-| Source in the tool | 100 papers | 40 papers |
-|---|---|---|
-| PubMed Central open-access bucket | 19 | 10 |
-| OpenAlex open-access locations | 8 | 2 |
-| CORE | 5 | 0 |
-| Europe PMC | 1 | 0 |
-| Semantic Scholar | 0 | 0 |
-| OpenAIRE | not in the tool then | not in the tool then |
+| Source in the tool | 100 papers, 2026-09-27 | 40 papers, 2026-09-29 | Same 40 papers, 2026-09-30 |
+|---|---|---|---|
+| PubMed Central open-access bucket | 19 | 10 | 10 |
+| OpenAlex open-access locations | 8 | 2 | 7 |
+| CORE | 5 | 0 | 0 |
+| Europe PMC | 1 | 0 | 1 |
+| Semantic Scholar | 0 | 0 | 0 |
+| OpenAIRE | not in the tool then | not in the tool then | 1 |
 
 Other sources, tested on the 28 papers the tool missed in the 40 paper run:
 
@@ -311,7 +315,7 @@ Other sources, tested on the 28 papers the tool missed in the 40 paper run:
 |---|---|---|
 | Unpaywall | Same best link as OpenAlex for 10 of 10 papers compared. 0 of 28 misses recovered. | Not added |
 | Crossref full-text links | 0 recovered | Not added |
-| OpenAIRE | 1 of 28 recovered, from a university repository | Added on 2026-09-30, after CORE. The terms of use allow 60 calls per hour without a token. |
+| OpenAIRE | 1 of 28 recovered, from a university repository | Added on 2026-09-30, after CORE. The terms of use allow 60 calls per hour without a token. Instance links whose host is doi.org or dx.doi.org are dropped: a resolver link leads to the publisher page, not to a repository copy. On 2026-09-30 two paywalled papers looked free because of such links. |
 | Zenodo | 0 recovered. Its one hit was a different article that cites the target. | Not added |
 | HAL, DOAJ, OSF, Figshare, bioRxiv, medRxiv | Nothing new | Not added |
 | BASE | The API needs an approved IP address. It answered "Access denied". | Not added |
@@ -371,6 +375,14 @@ Re-review this skill when any of the following changes materially:
   extraction. A malformed OpenAIRE or OpenAlex answer leaves the paper without that source
   instead of stopping the run. The exit-code table names which usage errors exit 1 and
   which exit 2.
+- 2026-09-30 (re-audit): OpenAIRE instance links whose host is doi.org or dx.doi.org are
+  dropped, because a resolver link is not a repository copy. The coverage tables carry the
+  run of this public tool on the same 40 papers: `SAVED 19: PubMed Central 10, OpenAlex 7,
+  OpenAIRE 1, Europe PMC 1 | OPEN_MANUALLY 6 | NO_FREE_COPY 15`. That count line was
+  measured before the resolver change in this entry; with it, the two paywalled papers
+  named under the first coverage table become `NO_FREE_COPY`, so the shipped tool gives
+  `OPEN_MANUALLY` 4 and `NO_FREE_COPY` 17 on the same 40 papers. The note about a one-page
+  notice saved as a paper is gone: the guard added the same day refuses such a file.
 - 2026-09-30: Second review fixes. The title fallback of `import` compares up to three
   PubMed and three Crossref candidates and takes a paper only when the numbers in the
   title, the year and the first author in the file name agree with it and it is not a
