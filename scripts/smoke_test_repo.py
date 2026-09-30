@@ -877,7 +877,10 @@ def test_paper_fetch_title_guard() -> None:
                  # round 3 of the review
                  "Example et al. - 2018 - Invented consensus report on peri-implant diseases.pdf",
                  "2020 - Example - Invented classic paper on bone.pdf",
-                 "2020 - Example - Invented short implants v long implants.pdf"]
+                 "2020 - Example - Invented short implants v long implants.pdf",
+                 # round 4 of the review: a Crossref sibling or comment cannot lend its DOI
+                 "2020 - Example - Invented no-doi part study Part I.pdf",
+                 "2020 - Example - Invented no-doi comment target study on marginal bone.pdf"]
         for n, name in enumerate(names):
             (source / name).write_bytes(f"%PDF-1.4 invented file {n}\n".encode())
         before = sorted(f.name for f in source.iterdir())
@@ -895,8 +898,18 @@ def test_paper_fetch_title_guard() -> None:
         classic = {"message": {"items": [{"DOI": "10.1234/classic.2112", "title": ["Invented classic paper on bone"],
                                           "issued": {"date-parts": [[2020]]}, "author": [{"family": "Example"}],
                                           "container-title": ["Invented J"]}]}}
+        def crossref_one(doi: str, title: str) -> bytes:
+            return json.dumps({"message": {"items": [{"DOI": doi, "title": [title], "issued": {"date-parts": [[2020]]},
+                                                      "author": [{"family": "Example"}], "container-title": ["Invented J"]}]}}).encode()
         papers = pathlib.Path(tmp) / "papers"
         pf = load_paper_fetch(papers, [
+            ("Invented+no-doi+part+study+Part+I%5Bti%5D", pubmed_found("2114")),
+            ("id=2114", pubmed_summary("2114", "Invented no-doi part study Part I")),
+            ("query.bibliographic=Invented+no-doi+part+study+Part+I", crossref_one("10.1234/part.2", "Invented no-doi part study Part II")),
+            ("Invented+no-doi+comment+target+study+on+marginal+bone%5Bti%5D", pubmed_found("2115")),
+            ("id=2115", pubmed_summary("2115", "Invented no-doi comment target study on marginal bone")),
+            ("query.bibliographic=Invented+no-doi+comment+target+study+on+marginal+bone",
+             crossref_one("10.1234/comment.2115", "Comment on: Invented no-doi comment target study on marginal bone")),
             ("Invented+classic+paper+on+bone%5Bti%5D", pubmed_found("2112")),
             ("id=2112", pubmed_summary("2112", "Invented classic paper on bone")),
             ("query.bibliographic=Invented+classic+paper+on+bone", json.dumps(classic).encode()),
@@ -933,7 +946,7 @@ def test_paper_fetch_title_guard() -> None:
         args = types.SimpleNamespace(files=[str(source.parent)], topic=None, topic_from_parent=True, days=1,
                                      move=False, yes=False, dry_run=False, no_figures=True)
         code, text = printed(pf.cmd_import, args)
-        expected = "IMPORTED 8 | EXISTS 1 | DUPLICATE_BYTES 0 | NO_MATCH 9 | NO_DOI 0"
+        expected = "IMPORTED 10 | EXISTS 1 | DUPLICATE_BYTES 0 | NO_MATCH 9 | NO_DOI 0"
         if code != 2 or text.strip().splitlines()[-1] != expected:
             fail(f"title guard: expected exit 2 and {expected!r}, got {code}: {text}")
         for reason in ("the numbers differ: 1 in the name, 2 in its title",
@@ -954,6 +967,8 @@ def test_paper_fetch_title_guard() -> None:
         if saved != ["2020 Example - Comment on Invented long report on marginal bone level changes around implants i - Invented J [PMID 2103].pdf",
                      "2020 Example - Invented 5-year results of something - Invented J [PMID 2111].pdf",
                      "2020 Example - Invented classic paper on bone - Invented J [PMID 2112].pdf",
+                     "2020 Example - Invented no-doi comment target study on marginal bone - Invented J [PMID 2115].pdf",
+                     "2020 Example - Invented no-doi part study Part I - Invented J [PMID 2114].pdf",
                      "2020 Example - Invented short implants versus long implants - Invented J [PMID 2113].pdf",
                      "2020 Example - Invented single plain title paper - Invented J [PMID 2109].pdf",
                      "2020 Example - Invented sound paper about bone levels - Invented J [PMID 2104].pdf",
@@ -965,6 +980,9 @@ def test_paper_fetch_title_guard() -> None:
         row = next(r for r in pf.index_rows() if r["pmid"] == "2112")
         if row["doi"] != "10.1234/classic.2112":
             fail(f"a PubMed paper without a DOI must take the DOI of its Crossref twin, got {row!r}")
+        dois = {r["pmid"]: r["doi"] for r in pf.index_rows() if r["pmid"] in ("2114", "2115")}
+        if dois != {"2114": "", "2115": ""}:
+            fail(f"a Crossref Part II or comment record must not lend its DOI to a PubMed record without one, got {dois!r}")
         if sorted(f.name for f in source.iterdir()) != before:
             fail("the title guard must never delete or move a source file")
         if not any("retmax=3" in c for c in pf.http_get.calls) or not any("rows=3" in c for c in pf.http_get.calls):

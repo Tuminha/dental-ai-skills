@@ -182,7 +182,8 @@ in the library. A PDF is identified in this order, and the tool never guesses:
    passes: a consensus report printed in two journals, with the same title, year and
    first author, is refused and both are named, so add a `[PMID n]` or `[DOI ...]` tag
    to the name to say which one. An older PubMed record without a DOI and its Crossref
-   twin count as one paper. A roman numeral counts as a number only after Part, Chapter,
+   twin count as one paper, and the twin must pass the same checks, so a Part II or a
+   comment record cannot lend its DOI. A roman numeral counts as a number only after Part, Chapter,
    Class, Type, Phase, Volume, Stage or Grade ("v" between two treatments is "versus").
    Otherwise the file is `NO_MATCH`, the closest title and the reason are printed, and
    the file stays where it is for a person to look at.
@@ -403,7 +404,9 @@ Re-review this skill when any of the following changes materially:
   counts. Round 3: the file is refused whenever more than one paper passes, whatever the
   name carries (the two-journal consensus report with year and author); an older PubMed
   record without a DOI and its Crossref twin count as one; roman numerals count only
-  after Part, Chapter, Class, Type, Phase, Volume, Stage or Grade.
+  after Part, Chapter, Class, Type, Phase, Volume, Stage or Grade. Round 4: the Crossref
+  twin must pass the same checks as the name, so a Part II or a comment record cannot
+  lend its DOI to a PubMed record without one.
 
 ---
 

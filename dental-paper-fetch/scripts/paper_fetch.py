@@ -1199,15 +1199,16 @@ def disagreement(title, year, author, cand):
 def title_candidates(title):
     """Up to three PubMed papers and three Crossref records whose title is close to the one
     given, PubMed first, no DOI twice. A Crossref record that is the twin of a PubMed paper
-    without a DOI (an older paper: the same title, the year within one, the same first
-    surname) gives that paper its DOI instead of standing beside it as a second candidate."""
+    without a DOI (an older paper: the title above TITLE_MATCH and nothing that
+    disagreement() refuses, so the same numbers, kind, year within one and first surname)
+    gives that paper its DOI instead of standing beside it as a second candidate. A Part
+    II or a comment record cannot lend its DOI."""
     candidates = pubmed_papers(pubmed_search(f"{title}[ti]", 3)[0])
     for r in crossref_records(title):
         if any(p["doi"] == r["doi"] for p in candidates):
             continue
         twin = next((p for p in candidates if not p["doi"] and similarity(p["title"], r["title"]) > TITLE_MATCH
-                     and p["year"].isdigit() and r["year"].isdigit() and abs(int(p["year"]) - int(r["year"])) <= 1
-                     and same_author(r["first_author"], p["first_author"])), None)
+                     and not disagreement(p["title"], p["year"], p["first_author"], r)), None)
         if twin:
             twin["doi"] = r["doi"]
         else:
