@@ -666,6 +666,70 @@ def test_paper_fetch_import_folder() -> None:
         fail("a title found by a file name must need a similarity above 0.85")
 
 
+def test_paper_fetch_library_commands() -> None:
+    """library rebuild-index writes one row per PDF on disk, keeping known rows without a
+    lookup and resolving unknown tags once; library stats counts topics, untagged files
+    and groups of files with the same bytes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        papers = pathlib.Path(tmp) / "papers"
+        a, b = papers / "Topic A", papers / "Topic B"
+        a.mkdir(parents=True)
+        b.mkdir()
+        same = b"%PDF-1.4 the same bytes\n"
+        known = a / "2020 Example - Invented test paper on bone levels - Invented J [PMID 1001].pdf"
+        known.write_bytes(same)
+        (a / "old name [PMID 1003].pdf").write_bytes(b"%PDF-1.4 scan\n")
+        (a / "[DOI 10.1234_invented.1005].pdf").write_bytes(b"%PDF-1.4 by doi\n")
+        (b / "[PMID 4040].pdf").write_bytes(b"%PDF-1.4 unknown pmid\n")
+        (b / "copy [PMID 1001].pdf").write_bytes(same)
+        (b / "no tag here.pdf").write_bytes(b"%PDF-1.4 no tag\n")
+        pf = load_paper_fetch(papers, [
+            ("id=1003", pubmed_summary("1003", "Invented scan with a DOI inside", "10.1234/invented.1003")),
+            ("id=1005", pubmed_summary("1005", "Invented paper found by its DOI tag", "10.1234/invented.1005")),
+            ("invented.1005%5Bdoi%5D", pubmed_found("1005")),
+            ("id=4040", json.dumps({"result": {"uids": ["4040"], "4040": {"uid": "4040", "error": "no such record"}}}).encode()),
+        ])
+        pf.write_index([{"saved_at": "2026-01-01T00:00:00", "topic": "Topic A", "pmid": "1001",
+                         "doi": "10.1234/invented.1001", "title": "Invented test paper on bone levels",
+                         "file": "Topic A/" + known.name, "sha256": pf.sha256_of(known), "license": "CC BY"},
+                        {"saved_at": "2026-01-01T00:00:00", "topic": "Topic A", "pmid": "1999",
+                         "file": "Topic A/gone [PMID 1999].pdf"}])
+        code, text = printed(pf.rebuild_index)
+        rows = pf.index_rows()
+        expected = [("Topic A/" + known.name, "1001"), ("Topic A/[DOI 10.1234_invented.1005].pdf", "1005"),
+                    ("Topic A/old name [PMID 1003].pdf", "1003"), ("Topic B/[PMID 4040].pdf", "4040"),
+                    ("Topic B/copy [PMID 1001].pdf", "1001")]
+        if code != 0 or [(r["file"], r["pmid"]) for r in rows] != expected:
+            fail(f"rebuild-index rows: expected {expected!r}, got {[(r['file'], r['pmid']) for r in rows]!r}: {text}")
+        if rows[0]["license"] != "CC BY" or rows[4]["license"] != "CC BY" or rows[4]["title"] != rows[0]["title"]:
+            fail("a known row must be kept, also for a second file with the same bytes")
+        if rows[1]["doi"] != "10.1234/invented.1005" or rows[2]["title"] != "Invented scan with a DOI inside":
+            fail(f"unknown tags must be resolved, got {rows[1]!r} {rows[2]!r}")
+        if rows[3]["title"] or rows[3]["source"] != "on disk" or rows[3]["oa_status"] != "unknown":
+            fail(f"a tag that matches no paper keeps a row with the tag only, got {rows[3]!r}")
+        if any(len(r["sha256"]) != 64 for r in rows):
+            fail("every row must carry the file's sha256")
+        if any("id=1001" in call for call in pf.http_get.calls):
+            fail("a row the index already holds must cost no lookup")
+        last = text.strip().splitlines()[-1]
+        if "kept 2 | added 2 | no metadata 1 | dropped 1 | files without a tag 1" not in last or "NO_TAG  Topic B/no tag here.pdf" not in text:
+            fail(f"rebuild-index must report kept, added, no metadata, dropped and untagged, got: {text}")
+
+        code, text = printed(pf.library_stats)
+        lines = text.splitlines()
+        if code != 0 or lines[1].split() != ["3", "Topic", "A"] or lines[2].split() != ["3", "Topic", "B"]:
+            fail(f"stats must count PDFs per topic, got: {text}")
+        if "PAPERS  6 PDF files in 2 topic folders | 5 index rows" not in text:
+            fail(f"stats must count files and index rows, got: {text}")
+        if "NO_TAG  1 file(s)" not in text or "Topic B/no tag here.pdf" not in text:
+            fail(f"stats must list files without a tag, got: {text}")
+        if "DUPLICATE_BYTES  1 group(s)" not in text or "Topic B/copy [PMID 1001].pdf" not in text:
+            fail(f"stats must list groups of files with the same bytes, got: {text}")
+    help_text = run([sys.executable, PAPER_FETCH, "library", "--help"]).stdout
+    if "rebuild-index" not in help_text or "stats" not in help_text:
+        fail("paper_fetch.py library --help must list rebuild-index and stats")
+
+
 def test_paper_fetch_sources_and_safety() -> None:
     """OpenAIRE links, the '%PDF' check, the count line, the key redirect rule, poppler limits."""
     found = {"results": [
@@ -818,6 +882,7 @@ TESTS = [
     test_paper_fetch_file_names,
     test_paper_fetch_index_columns,
     test_paper_fetch_import_folder,
+    test_paper_fetch_library_commands,
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
     test_fixtures,

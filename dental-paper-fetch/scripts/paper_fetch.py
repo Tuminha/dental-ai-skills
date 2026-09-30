@@ -65,6 +65,8 @@ Usage:
   paper_fetch.py import --topic "Peri-implantitis"          # lists PDFs in ~/Downloads from the last day
   paper_fetch.py import --topic "Peri-implantitis" --yes    # imports the PDFs on that list
   paper_fetch.py topics
+  paper_fetch.py library rebuild-index    # writes _index.csv from the files on disk
+  paper_fetch.py library stats            # papers per topic, files without a tag, duplicate files
 
 Exit codes: 0 all saved or already there, 2 at least one paper not saved (normal, most
 papers are paywalled) or `import` listed files and copied nothing or skipped a file that
@@ -1216,6 +1218,89 @@ def cmd_search(args):
     return finish_run([get_one(p["pmid"], args.topic, not args.no_figures, args.emails) for p in papers])
 
 
+def library_files():
+    """Every PDF in a topic folder of the library, folder by folder, in name order."""
+    if not ROOT.exists():
+        return []
+    return [f for d in sorted(ROOT.iterdir()) if d.is_dir() for f in sorted(d.iterdir())
+            if f.is_file() and f.suffix.lower() == ".pdf" and not f.name.startswith(".")]
+
+
+def rebuild_index():
+    """Write _index.csv from the files on disk, one row per PDF in a topic folder. A row the
+    index already holds (matched by path, then by bytes, then by tag) is kept, with its
+    file, topic and sha256 refreshed. A file the index does not know gets its metadata
+    from PubMed or OpenAlex by the tag in its name, one lookup per tag, at PubMed's 3 per
+    second. A file without a tag is listed and left out. Rows of files that are gone are
+    dropped."""
+    old = index_rows()
+    by_file = {r.get("file"): r for r in old}
+    by_sha = {r["sha256"]: r for r in old if r.get("sha256")}
+    by_tag = {("pmid", r["pmid"]): r for r in old if r.get("pmid")}
+    by_tag.update({("doi", r["doi"]): r for r in old if r.get("doi")})
+    rows, counts, resolved, kept = [], collections.Counter(), {}, set()
+    for f in library_files():
+        rel = str(f.relative_to(ROOT))
+        tag = tag_in_name(f.name)
+        if not tag:
+            print(f"NO_TAG  {rel}")
+            counts["NO_TAG"] += 1
+            continue
+        digest = sha256_of(f)
+        row = by_file.get(rel) or by_sha.get(digest) or by_tag.get(tag)
+        if row is not None:
+            kept.add(id(row))
+            rows.append({**row, "file": rel, "topic": f.parent.name, "sha256": digest})
+            counts["KEPT"] += 1
+            continue
+        if tag not in resolved:
+            resolved[tag] = resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1])
+        paper = resolved[tag]
+        if paper:
+            rows.append(index_row(paper, f, "on disk", digest))
+            print(f"ADDED  {rel}\n       {describe(paper)}")
+            counts["ADDED"] += 1
+        else:
+            rows.append({"saved_at": datetime.now().isoformat(timespec="seconds"), "topic": f.parent.name,
+                         "file": rel, "sha256": digest, tag[0]: tag[1], "source": "on disk",
+                         "oa_status": "unknown"})
+            print(f"NO_METADATA  {rel}\n       {tag[0].upper()} {tag[1]} matched no paper; the row holds the tag only")
+            counts["NO_METADATA"] += 1
+    write_index(rows)
+    dropped = sum(1 for r in old if id(r) not in kept)
+    print(f"INDEX  {len(rows)} rows in {ROOT / '_index.csv'}: kept {counts['KEPT']} | added {counts['ADDED']} "
+          f"| no metadata {counts['NO_METADATA']} | dropped {dropped} | files without a tag {counts['NO_TAG']}")
+    return 0
+
+
+def library_stats():
+    """Papers per topic, files without a tag, and groups of files with the same bytes."""
+    files = library_files()
+    print(ROOT)
+    per_topic = collections.Counter(f.parent.name for f in files)
+    for topic, n in sorted(per_topic.items()):
+        print(f"  {n:>4}  {topic}")
+    print(f"PAPERS  {len(files)} PDF files in {len(per_topic)} topic folders | {len(index_rows())} index rows")
+    untagged = [f for f in files if not tag_in_name(f.name)]
+    print(f"NO_TAG  {len(untagged)} file(s) without a [PMID n] or [DOI ...] tag in the name")
+    for f in untagged:
+        print(f"       {f.relative_to(ROOT)}")
+    groups = collections.defaultdict(list)
+    for f in files:
+        groups[sha256_of(f)].append(f)
+    same = [group for group in groups.values() if len(group) > 1]
+    print(f"DUPLICATE_BYTES  {len(same)} group(s) of files with the same bytes")
+    for n, group in enumerate(same, 1):
+        print(f"       group {n}: {len(group)} files")
+        for f in group:
+            print(f"       {f.relative_to(ROOT)}")
+    return 0
+
+
+def cmd_library(args):
+    return {"rebuild-index": rebuild_index, "stats": library_stats}[args.what]()
+
+
 def cmd_topics(args):
     print(ROOT)
     if ROOT.exists():
@@ -1264,12 +1349,15 @@ def main():
                    help="print what would happen to each file and copy nothing")
     i.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     sub.add_parser("topics", help="list topic folders and how many PDFs each holds")
+    lib = sub.add_parser("library", help="rebuild-index: write _index.csv from the files on disk; "
+                                         "stats: papers per topic, files without a tag, duplicate files")
+    lib.add_argument("what", choices=["rebuild-index", "stats"])
     args = ap.parse_args()
     if args.cmd != "search" or args.download:  # every command that reads or writes the folder
         require_drive()
     try:
         return {"get": cmd_get, "search": cmd_search, "import": cmd_import,
-                "topics": cmd_topics}[args.cmd](args)
+                "topics": cmd_topics, "library": cmd_library}[args.cmd](args)
     except NET_ERRORS as e:
         print(f"error: network problem or bad answer from PubMed: {e}", file=sys.stderr)
         return 1
