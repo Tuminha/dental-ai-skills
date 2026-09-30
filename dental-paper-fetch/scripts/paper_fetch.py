@@ -497,12 +497,25 @@ def fetch(url):
         return b"", "timeout" if is_timeout_error(error) else ""
 
 
+NOTICE_MAX_BYTES = 60_000
+
+
+def looks_like_notice(data):
+    """True for a PDF that is one page and under 60 KB. Some repositories answer a request
+    for a paper with a one-page notice ("the full text is not available") that is itself a
+    PDF, so the %PDF check alone would save it as the paper. A real article has more pages
+    or more bytes. The page count comes from the PDF's own page objects; no poppler needed."""
+    pages = len(re.findall(rb"/Type\s*/Page(?![s/\w])", data))
+    return len(data) < NOTICE_MAX_BYTES and pages <= 1
+
+
 def download_pdf(paper):
     """Return (pdf bytes, source label, url, free links that failed).
 
     Each failed link is (url, reason), the reason as fetch() gives it. Free links fail when
     the site answers with a bot check or 403, when its certificate fails the check, or when
-    the server does not answer in time. Those are left for a person to open in a browser;
+    the server does not answer in time, or the file there is a one-page notice. Those are
+    left for a person to open in a browser;
     this script never tries to get past a bot check.
     """
     tried, failed = set(), []
@@ -520,6 +533,9 @@ def download_pdf(paper):
                     tried.add(pdf_url)
                     data, reason = fetch(pdf_url)
         if data.startswith(b"%PDF"):
+            if looks_like_notice(data):
+                failed.append((url, "notice"))
+                continue
             return data, label, url, []
         failed.append((url, reason))
     return None, None, None, failed
@@ -537,8 +553,12 @@ def open_manually_lines(failed):
     if reasons == {"timeout"}:
         return ["Free to read, but the server did not answer in time. Run the command again "
                 "later, or open in a browser:"] + [url for url, _ in shown]
+    if reasons == {"notice"}:
+        return ["The only free copy found is a one-page notice, not the paper. Check in a "
+                "browser:"] + [url for url, _ in shown]
     notes = {"certificate": "  (this server has a certificate problem)",
-             "timeout": "  (this server did not answer in time)"}
+             "timeout": "  (this server did not answer in time)",
+             "notice": "  (the file there is a one-page notice, not the paper)"}
     return ["Free to read, but the site blocks download scripts. Open in a browser:"] + [
         url + notes.get(reason, "") for url, reason in shown]
 

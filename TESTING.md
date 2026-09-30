@@ -412,7 +412,7 @@ python3 dental-paper-fetch/scripts/paper_fetch.py import --help
 ### PF Test 7: Script Logic with a Fake Network (offline)
 **Command, from the repo root:** `python3 scripts/smoke_test_repo.py`
 
-The six `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the script as a module and replace its network function with a fake. No request leaves the machine.
+The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the script as a module and replace its network function with a fake. No request leaves the machine.
 
 **Check:**
 - [ ] `test_paper_fetch_version_folder`: the newest PubMed Central version that holds the PDF wins, and the license comes from that same version
@@ -421,6 +421,7 @@ The six `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the scr
 - [ ] `test_paper_fetch_certificate_retry`: a certificate error is retried once with curl, with `-q` first, `--fail`, and never `-k` or `--insecure`; when curl fails the check too (exit 60), `OPEN_MANUALLY` names the certificate problem; a time limit (curl exit 28, or Python) says "did not answer in time"; an HTTP error (exit 22) says the site blocks scripts
 - [ ] `test_paper_fetch_import_needs_yes`: `import` with no file names lists the PDFs and copies nothing without `--yes`
 - [ ] `test_paper_fetch_sources_and_safety`: OpenAIRE links of the same DOI only and string links from a list only, the PDF marker check, the count line, the refused redirect for the CORE key, the poppler time limit (figures and `import`) and the one-time install note
+- [ ] `test_paper_fetch_notice_pdf`: a one-page PDF under 60 KB is a repository notice, never saved; `OPEN_MANUALLY` says so; a two-page PDF is saved as before
 
 ---
 

@@ -345,7 +345,8 @@ def test_paper_fetch_pmid_without_doi() -> None:
         pf = load_paper_fetch(pathlib.Path(tmp) / "papers", [
             ("esummary.fcgi", json.dumps(summary).encode()),
             ("api.openalex.org/works/pmid:301", json.dumps(work).encode()),
-            ("https://journal.example/301.pdf", b"%PDF-1.4 invented"),
+            ("https://journal.example/301.pdf", b"%PDF-1.4 invented\n"
+             b"3 0 obj << /Type /Page >> endobj\n4 0 obj << /Type /Page >> endobj\n"),
         ])
         paper, _ = pf.resolve("301")
         if not paper or paper["doi"] != "10.1234/invented.301":
@@ -582,6 +583,36 @@ def test_iasella_golden_concepts() -> None:
         fail(f"Iasella fixture missing required anti-regression concepts: {missing}")
 
 
+def test_paper_fetch_notice_pdf() -> None:
+    """A one-page PDF under 60 KB is a repository notice, not the paper: it is never saved."""
+    one_page = b"%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n" \
+               b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n" \
+               b"3 0 obj << /Type /Page /Parent 2 0 R >> endobj\n%%EOF\n"
+    two_pages = one_page.replace(b"/Count 1", b"/Count 2") + b"4 0 obj << /Type /Page /Parent 2 0 R >> endobj\n"
+    big_one_page = one_page + b"%" + b"x" * 70_000 + b"\n"
+    found = {"results": [{"pids": [{"scheme": "doi", "value": "10.1234/invented.700"}], "instances": [
+        {"accessRight": {"label": "OPEN"}, "urls": ["https://repository.example/700.pdf"]}]}]}
+    with tempfile.TemporaryDirectory() as tmp:
+        pf = load_paper_fetch(pathlib.Path(tmp) / "papers", [
+            ("api.openaire.eu/graph/v3/research-products", json.dumps(found).encode()),
+            ("https://repository.example/700.pdf", one_page),
+        ])
+        if not pf.looks_like_notice(one_page) or pf.looks_like_notice(two_pages) or pf.looks_like_notice(big_one_page):
+            fail("looks_like_notice must flag only a one-page PDF under 60 KB")
+        paper = invented_paper(doi="10.1234/invented.700")
+        data, _, _, failed = pf.download_pdf(paper)
+        if data is not None or failed != [("https://repository.example/700.pdf", "notice")]:
+            fail(f"a one-page notice PDF must be a failed link with reason 'notice', got {data!r} {failed!r}")
+        lines = pf.open_manually_lines(failed)
+        if "one-page notice" not in lines[0] or lines[1] != "https://repository.example/700.pdf":
+            fail(f"OPEN_MANUALLY must say the free copy is a notice, got {lines!r}")
+        pf.http_get = FakeNetwork([("api.openaire.eu/graph/v3/research-products", json.dumps(found).encode()),
+                                   ("https://repository.example/700.pdf", two_pages)])
+        data, label, _, _ = pf.download_pdf(paper)
+        if data != two_pages or label != "open-access copy via OpenAIRE":
+            fail("a two-page PDF must be saved as before")
+
+
 TESTS = [
     test_required_skills_present,
     test_skill_frontmatter_validator,
@@ -597,6 +628,7 @@ TESTS = [
     test_paper_fetch_certificate_retry,
     test_paper_fetch_import_needs_yes,
     test_paper_fetch_sources_and_safety,
+    test_paper_fetch_notice_pdf,
     test_fixtures,
     test_iasella_golden_concepts,
 ]
