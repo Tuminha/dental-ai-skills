@@ -205,6 +205,13 @@ browser-style identity on 3.
 | Free, but the site refused the script (`OPEN_MANUALLY`) | 13 | 8 | 6 |
 | No free copy (`NO_FREE_COPY`) | 54 | 20 | 15 |
 
+The 6 and 15 in the 2026-09-30 column were counted before the doi.org resolver change
+that ships in this version. Two of the 6 were paywalled papers that only looked free
+through an OpenAIRE resolver link (PMIDs 32040899 and 32040897). Run on those two papers
+on 2026-09-30, the tool as shipped reports both as `NO_FREE_COPY`, so on the same 40
+papers it gives `OPEN_MANUALLY` 4 and `NO_FREE_COPY` 17. `SAVED` 19 does not change: the
+one OpenAIRE save came from a university repository, not from a resolver link.
+
 Between 30 and 48 of every 100 periodontology and implant papers download automatically,
 in two samples of 100 and 40 papers. Most of the rest are paywalled. The 40 papers came in
 runs of neighbouring PubMed ids, not a random draw, so the higher figure could be luck. A
@@ -281,7 +288,10 @@ Re-review this skill when any of the following changes materially:
 - 2026-09-30 (re-audit): OpenAIRE instance links whose host is doi.org or dx.doi.org are
   dropped, because a resolver link is not a repository copy. The coverage tables carry the
   run of this public tool on the same 40 papers: `SAVED 19: PubMed Central 10, OpenAlex 7,
-  OpenAIRE 1, Europe PMC 1 | OPEN_MANUALLY 6 | NO_FREE_COPY 15`. The note about a one-page
+  OpenAIRE 1, Europe PMC 1 | OPEN_MANUALLY 6 | NO_FREE_COPY 15`. That count line was
+  measured before the resolver change in this entry; with it, the two paywalled papers
+  named under the first coverage table become `NO_FREE_COPY`, so the shipped tool gives
+  `OPEN_MANUALLY` 4 and `NO_FREE_COPY` 17 on the same 40 papers. The note about a one-page
   notice saved as a paper is gone: the guard added the same day refuses such a file.
 
 ---
