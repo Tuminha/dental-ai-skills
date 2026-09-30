@@ -21,7 +21,7 @@ This skill uses **OpenAI's Images API** with the model `gpt-image-2.5-sunburst` 
 
 1. Go to **[https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)**
 2. Sign in and click **"Create new secret key"**
-3. Copy the key. The OpenAI account needs billing set up before the key can generate images.
+3. Copy the key. OpenAI may ask you to complete API Organization Verification in the developer console before the key can use the GPT Image models (https://developers.openai.com/api/docs/guides/image-generation, read 2026-09-30).
 
 ```bash
 # Add to your shell profile (~/.zshrc, ~/.bashrc)
