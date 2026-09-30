@@ -44,7 +44,7 @@ This skill downloads and files papers. It does not appraise them.
 | Python 3.10 or newer | Yes | Standard library only. Nothing to install with pip. |
 | A runtime that runs scripts and reaches the internet | Yes | Claude Code, Codex or a terminal. In a chat-only runtime, ask the user for a PDF they may lawfully share. |
 | poppler (`pdftotext`, `pdfimages`, `pdftoppm`, `pdfinfo`) | Optional | Needed by `import`, and for figures from PDFs that are not in PubMed Central. Package `poppler` in Homebrew, `poppler-utils` in Debian and Ubuntu. Without it, `get` saves the PDF, takes no figures from it and prints the install command once per run. Each poppler call has a time limit of 120 seconds. |
-| `curl` | Optional | Used once per link when a server fails Python's certificate check, with certificate checking on. `/usr/bin/curl` on macOS completes a chain that leaves out an intermediate certificate. Without curl, those links are reported as `OPEN_MANUALLY` with the certificate reason. |
+| `curl` | Optional | Used once per link when a server fails Python's certificate check, with certificate checking on. `/usr/bin/curl` on macOS completes a chain that leaves out an intermediate certificate. Without curl, those links are reported as `OPEN_MANUALLY` with the certificate reason. A curl exit that is not a certificate failure is not reported as one: a time limit gives "did not answer in time", an HTTP error gives the block wording. |
 | `PAPERS_DIR` | Optional | Folder for everything the tool saves. Default: `./papers` under the current directory. The tool prints one line when it creates the folder. |
 | `CORE_API_KEY` | Optional | API key for CORE, registered at https://core.ac.uk/services/api. Sent in the Authorization header of requests to `api.core.ac.uk`. Those requests never follow a redirect to another host. Without it the tool skips CORE. |
 | `PAPER_FETCH_EMAIL` | Optional | A contact address. Sent to PubMed (E-utilities `email` parameter), OpenAlex and Crossref (`mailto` parameter). Sent to no other service. Leave it unset to send no address. |
@@ -100,7 +100,7 @@ topic folder and answers `EXISTS`.
 |---|---|---|
 | `SAVED` | A PDF was downloaded and filed. The line under it gives the source. | Open page 1 and confirm the title. The tool checks that the file is a PDF. It does not check the content. |
 | `EXISTS` | The PDF is already in a topic folder. | Read it. |
-| `OPEN_MANUALLY` | A free copy is listed, but every link failed for the script: a bot check, a refusal, a page with no PDF, or a network error. When a server failed the certificate check and the one retry with curl brought nothing, the lines under it say "the server has a certificate problem" instead of "the site blocks download scripts". | Give the user the printed links to open in a browser. Do not try to get past the block. On a certificate problem, tell the user not to continue past a browser security warning. |
+| `OPEN_MANUALLY` | A free copy is listed, but every link failed for the script: a bot check, a refusal, a page with no PDF, or a network error. When a server failed the certificate check and the one retry with curl failed the check too, the lines under it say "the server has a certificate problem" instead of "the site blocks download scripts". When the server did not answer within the time limit, in Python or in the curl retry, the lines say "the server did not answer in time". | Give the user the printed links to open in a browser. Do not try to get past the block. On a certificate problem, tell the user not to continue past a browser security warning. On "did not answer in time", run the command again later before giving the user the link. |
 | `NO_FREE_COPY` | No free legal copy was found. Most often the paper is paywalled. | Follow "When a paper does not download". |
 | `NOT_FOUND` | The identifier or title matched no paper. | Check the identifier. |
 
@@ -119,8 +119,8 @@ said the full text is not available. The tool printed `SAVED`. The size on the l
 | Exit code | Meaning |
 |---|---|
 | 0 | Every paper was saved or was already there. |
-| 2 | At least one paper was not saved. This is normal: most papers are paywalled. Read the result lines. A wrong command line also exits with 2, with a usage message. So does `import` with no file names and no `--yes`, after listing the files. |
-| 1 | Error. For example a network failure, a bad answer from PubMed, or `import` without poppler. |
+| 2 | At least one paper was not saved. This is normal: most papers are paywalled. Read the result lines. A command line with a missing `--topic` or an unknown flag also exits with 2, with a usage message. So does `import` with no file names and no `--yes`, after listing the files. |
+| 1 | Error. For example a network failure, a bad answer from PubMed, or `import` without poppler. A command line with no identifier, `--download` without `--topic`, or an empty `--topic` also exits with 1, with one error line. |
 
 ## When a paper does not download
 
@@ -274,6 +274,13 @@ Re-review this skill when any of the following changes materially:
   have a time limit. `import` with no file names lists the PDFs and needs `--yes`. One count
   line per run. Checked live on 2026-09-30: the OpenAIRE Graph API fields and terms of use,
   the curl manual for `-q`, `--retry` and `--max-time`, and one paper per fix.
+- 2026-09-30: Review fixes. The curl retry reports a certificate problem only when curl's
+  exit code is a certificate failure (35, 60, 83 or 91 in the curl 8.7.1 manual); a time
+  limit, in Python or in curl, is reported as "did not answer in time", and an HTTP error
+  (`--fail`) as a block. Poppler calls in `import` use the same 120 second limit as figure
+  extraction. A malformed OpenAIRE or OpenAlex answer leaves the paper without that source
+  instead of stopping the run. The exit-code table names which usage errors exit 1 and
+  which exit 2.
 
 ---
 

@@ -367,6 +367,16 @@ def test_paper_fetch_pmid_without_doi() -> None:
         if not paper or paper["doi"]:
             fail("a DOI from an OpenAlex record with another title must not be used")
 
+        # An OpenAlex answer that is not a record (null, a list): the paper keeps no DOI
+        for answer in (b"null", b"[]"):
+            pf = load_paper_fetch(pathlib.Path(tmp) / "papers", [
+                ("esummary.fcgi", json.dumps(summary).encode()),
+                ("api.openalex.org/works/pmid:301", answer),
+            ])
+            paper, _ = pf.resolve("301")
+            if not paper or paper["doi"]:
+                fail(f"an OpenAlex answer of {answer!r} must leave the paper without a DOI, not crash")
+
 
 def test_paper_fetch_certificate_retry() -> None:
     """A certificate error is retried once with curl, checking on, and reported as such."""
@@ -378,7 +388,7 @@ def test_paper_fetch_certificate_retry() -> None:
         pf = load_paper_fetch(papers, [(url, chain_error)])
         pf.shutil = tools_found("curl")
         pf.subprocess = FakeProcesses(returncode=0, stdout=b"%PDF-1.4 through curl")
-        if pf.fetch(url) != (b"%PDF-1.4 through curl", False):
+        if pf.fetch(url) != (b"%PDF-1.4 through curl", ""):
             fail("a certificate error must be retried with curl and the PDF returned")
         command = pf.subprocess.commands[0] if len(pf.subprocess.commands) == 1 else []
         if not command or not command[0].endswith("curl") or command[-1] != url:
@@ -388,6 +398,8 @@ def test_paper_fetch_certificate_retry() -> None:
         unsafe = {"-k", "--insecure", "--proxy-insecure", "--cacert", "--capath"}
         if unsafe & set(command) or not pf.subprocess.options[0].get("timeout"):
             fail(f"curl must keep certificate checking on and have a time limit: {command!r}")
+        if "--fail" not in command:
+            fail(f"curl must not return an HTTP error page as a body: --fail missing in {command!r}")
 
         # curl fails too: OPEN_MANUALLY names the certificate problem, not a script block
         pf.subprocess = FakeProcesses(returncode=60, stdout=b"")
@@ -400,6 +412,26 @@ def test_paper_fetch_certificate_retry() -> None:
             fail(f"OPEN_MANUALLY must name the certificate problem and the link, got: {text}")
         if papers.exists():
             fail("a failed download must not create the papers folder")
+
+        # curl runs out of time (exit 28): a slow server, not a certificate problem
+        pf.subprocess = FakeProcesses(returncode=28, stdout=b"")
+        result, text = printed(pf.get_one, "401", "Test topic", with_figures=False)
+        if result != ("OPEN_MANUALLY", "") or "did not answer in time" not in text or url not in text:
+            fail(f"a curl timeout must be reported as 'did not answer in time' with the link, got: {text}")
+        if "certificate" in text or "blocks download scripts" in text:
+            fail(f"a curl timeout must not be reported as a certificate problem or a block, got: {text}")
+        # An HTTP error (curl --fail, exit 22 or 56 with no body) is a plain refusal
+        pf.subprocess = FakeProcesses(returncode=22, stdout=b"")
+        _, text = printed(pf.get_one, "401", "Test topic", with_figures=False)
+        if "blocks download scripts" not in text or "certificate" in text:
+            fail(f"an HTTP error after the curl retry is a block, not a certificate problem, got: {text}")
+
+        # Python itself runs out of time: no curl call, same timeout wording
+        pf.http_get = FakeNetwork([(url, urllib.error.URLError(TimeoutError("timed out")))])
+        pf.subprocess = FakeProcesses(returncode=0, stdout=b"%PDF-1.4 through curl")
+        _, text = printed(pf.get_one, "401", "Test topic", with_figures=False)
+        if pf.subprocess.commands or "did not answer in time" not in text or "certificate" in text:
+            fail(f"a Python timeout must be reported as 'did not answer in time' without curl, got: {text}")
 
         # Any other network error: no curl call, and the old message stays
         pf.http_get = FakeNetwork([(url, urllib.error.URLError("connection refused"))])
@@ -468,8 +500,16 @@ def test_paper_fetch_sources_and_safety() -> None:
         if labels != ["open-access copy via OpenAIRE"]:
             fail(f"expected OpenAIRE as the only source that answered, got {labels!r}")
         data, _, _, failed = pf.download_pdf(paper)
-        if data is not None or failed != [("https://repository.example/601.pdf", False)]:
+        if data is not None or failed != [("https://repository.example/601.pdf", "")]:
             fail("an answer that does not start with %PDF must never be saved")
+
+        # A malformed OpenAIRE answer: non-string entries are dropped, a string is not a list
+        malformed = {"results": [{"pids": [{"scheme": "doi", "value": "10.1234/invented.601"}], "instances": [
+            {"accessRight": {"label": "OPEN"}, "urls": [None, 5, "https://repository.example/a.pdf"]},
+            {"accessRight": {"label": "OPEN"}, "urls": "https://repository.example/b.pdf"}]}]}
+        pf.http_get = FakeNetwork([("api.openaire.eu/graph/v3/research-products", json.dumps(malformed).encode())])
+        if pf.openaire_pdfs(paper) != ["https://repository.example/a.pdf"]:
+            fail(f"OpenAIRE: only string links from a list count, got {pf.openaire_pdfs(paper)!r}")
 
         results = ([("SAVED", "PubMed Central")] * 10 + [("SAVED", "OpenAlex")] * 2
                    + [("OPEN_MANUALLY", "")] * 8 + [("NO_FREE_COPY", "")] * 20)
@@ -496,6 +536,12 @@ def test_paper_fetch_sources_and_safety() -> None:
         pf.pdf_captions(pathlib.Path(tmp) / "invented.pdf")
         if not pf.subprocess.options or not pf.subprocess.options[0].get("timeout"):
             fail("poppler calls must have a time limit")
+        pf.shutil = tools_found("pdfinfo", "pdftotext")
+        pf.subprocess = FakeProcesses(stdout="doi:10.1234/invented.601 on page 1")
+        if pf.doi_in_pdf(pathlib.Path(tmp) / "invented.pdf") != "10.1234/invented.601":
+            fail("import must read the DOI printed in the PDF")
+        if pf.subprocess.options[0].get("timeout") != pf.POPPLER_TIMEOUT:
+            fail(f"import's poppler calls must use POPPLER_TIMEOUT, got {pf.subprocess.options!r}")
         pf.shutil = tools_found()
         calls = [printed(pf.pdf_figures, pathlib.Path(tmp) / "invented.pdf", pathlib.Path(tmp))
                  for _ in range(2)]

@@ -8,11 +8,11 @@ A collection of AI skills (structured markdown protocols) for dental professiona
 
 | Skill | Folder | Purpose |
 |-------|--------|---------|
+| Dental Author Disclosures | `dental-author-disclosures/` | Dated, sourced register of author and sponsor relationships. No score, no inference of bias from a name, a talk or a membership. |
 | Research Critic | `research-critic/` | Single-paper appraisal (PICO, bias tools in native formats, dental-specific red flags, claim-to-evidence map, Study Credibility score). Single-paper, internal-credibility focused. |
 | Clinical Evidence Reviewer | `clinical-evidence-reviewer/` | Body-of-evidence reviews with runtime-aware retrieval mode, PICO, GRADE certainty **per critical outcome**, guideline vs expert-consensus distinction, citation policy with uncertainty labels. |
 | Dental Evidence Retriever | `dental-evidence-retriever/` | Literature-search workflow (PICO → PubMed/Cochrane/guideline-body/registry strategies → retrieval log). Honest about runtime — no fabricated citations. |
 | Dental Paper Fetch | `dental-paper-fetch/` | Gets the free full-text PDF and figures of a paper by PMID, DOI, PMCID or title. Legal open-access sources only. Reports paywalled papers with their link. No way around paywalls or bot checks. |
-| Dental Author Disclosures | `dental-author-disclosures/` | Dated, sourced register of author and sponsor relationships. No score, no inference of bias from a name, a talk or a membership. |
 | Dental Statistical Forensics | `dental-statistical-forensics/` | Deep numerical audit (SD/range, CIs, effect sizes, MCID, individual predictability, unit-of-analysis errors, clustering, multiplicity, missing data, measurement reliability, model appropriateness). |
 | Dental Evidence Report Artifact | `dental-evidence-report-artifact/` | Converts completed evidence analysis into HTML/PDF-ready reports without adding new scientific claims. |
 | Dental Content Creator | `dental-content-creator/` | Audience-aware dental content with platform adaptations and no-overclaim guardrails. |

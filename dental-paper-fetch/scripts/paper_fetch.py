@@ -238,6 +238,8 @@ def doi_from_openalex(paper):
         w = get_json(with_mailto("https://api.openalex.org/works/pmid:" + paper["pmid"]))
     except NET_ERRORS:
         return paper
+    if not isinstance(w, dict):  # an answer that parses but is not a record, e.g. null
+        return paper
     doi = re.sub(r"(?i)^https?://(dx\.)?doi\.org/", "", w.get("doi") or "").lower()
     same_pmid = re.sub(r"\D", "", (w.get("ids") or {}).get("pmid") or "") == paper["pmid"]
     if doi and same_pmid and similarity(paper["title"], clean_text(w.get("title"))) > 0.8:
@@ -388,13 +390,14 @@ def openaire_pdfs(paper):
                        for p in product.get("pids") or []):
                 continue
             for instance in product.get("instances") or []:
-                if (instance.get("accessRight") or {}).get("label") == "OPEN":
-                    urls += instance.get("urls") or []
+                if (instance.get("accessRight") or {}).get("label") == "OPEN" \
+                        and isinstance(instance.get("urls"), list):
+                    urls += instance["urls"]
     except NET_ERRORS + (AttributeError, TypeError):
         return []
     # A PubMed record page is an abstract, not a copy of the paper
     return [u for u in dict.fromkeys(urls)
-            if u and urllib.parse.urlparse(u).netloc != "pubmed.ncbi.nlm.nih.gov"]
+            if isinstance(u, str) and u and urllib.parse.urlparse(u).netloc != "pubmed.ncbi.nlm.nih.gov"]
 
 
 def author_emails(pmid):
@@ -443,49 +446,71 @@ def is_certificate_error(error):
         isinstance(getattr(error, "reason", None), ssl.SSLCertVerificationError)
 
 
+def is_timeout_error(error):
+    """True when the server did not answer within the time limit."""
+    return isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError)
+
+
+# curl exit codes that mean the certificate check failed (curl 8.7.1 manual): 35 SSL handshake
+# failed, 60 peer certificate cannot be authenticated, 83 issuer check failed, 91 invalid
+# certificate status. Any other failure is not reported as a certificate problem.
+CURL_CERTIFICATE_EXITS = {35, 60, 83, 91}
+
+
 def curl_get(url, timeout=120):
     """One download with the system curl, certificate checking ON. /usr/bin/curl comes first:
     on macOS that build completes a chain when a server leaves out an intermediate
     certificate, which Python cannot. -q in first place skips any curl config file, so no
-    setting from there can switch the check off. --retry 1 repeats the transfer once after
-    a timeout or a 5xx answer, because the one publisher seen with this fault takes 30 to
-    60 seconds per PDF. Returns b"" when curl is missing or fails."""
+    setting from there can switch the check off. --fail returns no body for an HTTP error
+    page. --retry 1 repeats the transfer once after a timeout or a 5xx answer, because the
+    one publisher seen with this fault takes 30 to 60 seconds per PDF.
+
+    Returns (bytes, reason). The reason is "" when curl answered or the server refused,
+    "certificate" when curl is missing or its certificate check failed too, and "timeout"
+    when the server did not answer in time (curl exit 28 or the subprocess limit)."""
     curl = shutil.which("curl", path="/usr/bin") or shutil.which("curl")
     if not curl or not url.lower().startswith("https://"):
-        return b""
+        return b"", "certificate"
     try:
-        done = subprocess.run([curl, "-q", "-sSL", "--retry", "1", "--max-time", str(timeout),
+        done = subprocess.run([curl, "-q", "-sSL", "--fail", "--retry", "1", "--max-time", str(timeout),
                                "-A", USER_AGENT, url], capture_output=True, timeout=2 * timeout + 10)
+    except subprocess.TimeoutExpired:
+        return b"", "timeout"
     except (subprocess.SubprocessError, OSError):
-        return b""
-    return done.stdout if done.returncode == 0 else b""
+        return b"", ""
+    if done.returncode == 0:
+        return done.stdout, ""
+    if done.returncode == 28:
+        return b"", "timeout"
+    return b"", "certificate" if done.returncode in CURL_CERTIFICATE_EXITS else ""
 
 
 def fetch(url):
-    """Return (bytes, certificate problem). The second value is True when the server failed
-    the certificate check and the one retry with curl brought nothing either."""
+    """Return (bytes, reason). The reason is "" for an answer or a plain refusal,
+    "certificate" when the server failed the certificate check and the one retry with curl
+    brought nothing either, and "timeout" when the server did not answer in time."""
     try:
-        return http_get(url, timeout=120, tries=1), False
+        return http_get(url, timeout=120, tries=1), ""
     except NET_ERRORS as error:
-        if not is_certificate_error(error):
-            return b"", False
-    data = curl_get(url)
-    return data, not data
+        if is_certificate_error(error):
+            return curl_get(url)
+        return b"", "timeout" if is_timeout_error(error) else ""
 
 
 def download_pdf(paper):
     """Return (pdf bytes, source label, url, free links that failed).
 
-    Each failed link is (url, certificate problem). Free links fail when the site answers
-    with a bot check or 403, or when its certificate fails the check. Those are left for a
-    person to open in a browser; this script never tries to get past a bot check.
+    Each failed link is (url, reason), the reason as fetch() gives it. Free links fail when
+    the site answers with a bot check or 403, when its certificate fails the check, or when
+    the server does not answer in time. Those are left for a person to open in a browser;
+    this script never tries to get past a bot check.
     """
     tried, failed = set(), []
     for label, url in pdf_candidates(paper):
         if url in tried:
             continue
         tried.add(url)
-        data, certificate_problem = fetch(url)
+        data, reason = fetch(url)
         if data and not data.startswith(b"%PDF"):
             # Journal and repository landing pages name their PDF in a standard meta tag
             for tag in re.findall(rb"<meta[^>]*citation_pdf_url[^>]*>", data, re.I)[:1]:
@@ -493,24 +518,29 @@ def download_pdf(paper):
                 pdf_url = m and urllib.parse.urljoin(url, html.unescape(m.group(1).decode()))
                 if pdf_url and pdf_url not in tried:
                     tried.add(pdf_url)
-                    data, certificate_problem = fetch(pdf_url)
+                    data, reason = fetch(pdf_url)
         if data.startswith(b"%PDF"):
             return data, label, url, []
-        failed.append((url, certificate_problem))
+        failed.append((url, reason))
     return None, None, None, failed
 
 
 def open_manually_lines(failed):
     """The lines printed under OPEN_MANUALLY: the reason, then at most 3 links."""
     shown = failed[:3]
-    if all(certificate_problem for _, certificate_problem in shown):
+    reasons = {reason for _, reason in shown}
+    if reasons == {"certificate"}:
         lines = ["Free to read, but the server has a certificate problem, so the script did not "
                  "download it.",
                  "Open in a browser. If the browser shows a security warning, do not continue:"]
         return lines + [url for url, _ in shown]
+    if reasons == {"timeout"}:
+        return ["Free to read, but the server did not answer in time. Run the command again "
+                "later, or open in a browser:"] + [url for url, _ in shown]
+    notes = {"certificate": "  (this server has a certificate problem)",
+             "timeout": "  (this server did not answer in time)"}
     return ["Free to read, but the site blocks download scripts. Open in a browser:"] + [
-        url + ("  (this server has a certificate problem)" if certificate_problem else "")
-        for url, certificate_problem in shown]
+        url + notes.get(reason, "") for url, reason in shown]
 
 
 def lookup_license(paper):
@@ -881,7 +911,7 @@ def doi_in_pdf(pdf):
         if not shutil.which(cmd[0]):
             continue
         try:
-            text = subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout
+            text = subprocess.run(cmd, capture_output=True, text=True, timeout=POPPLER_TIMEOUT).stdout
         except (subprocess.SubprocessError, OSError):
             continue
         m = DOI_IN_TEXT.search(text)
