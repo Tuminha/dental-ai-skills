@@ -756,6 +756,48 @@ def test_paper_fetch_import_folder() -> None:
         if "ERROR  " + str(second / "a [PMID 1001].pdf") not in text or "No space left" not in text:
             fail(f"the ERROR line must name the file and the fault, got: {text}")
 
+        # A copy that stops half way leaves no truncated PDF under the paper's name and no
+        # .part file, and the next copy of the same paper is imported
+        halfway = pathlib.Path(tmp) / "papers-halfway"
+        pf = import_test_module(halfway)
+        real_copy, targets = pf.shutil.copyfile, []
+
+        def copy_once_halfway(src: str, dst: str) -> None:
+            targets.append(dst)
+            if len(targets) == 1:
+                pathlib.Path(dst).write_bytes(same[:10])
+                raise OSError(28, "No space left on device")
+            real_copy(src, dst)
+        pf.shutil.copyfile = copy_once_halfway
+        code, text = printed(pf.cmd_import, args_second)
+        left = sorted(f.name for f in (halfway / "Peri-implantitis").iterdir() if f.suffix != ".bib")
+        if text.strip().splitlines()[-1] != "IMPORTED 1 | EXISTS 0 | DUPLICATE_BYTES 0 | NO_MATCH 0 | NO_DOI 0 | ERROR 1" \
+                or left != [saved[1]] or (halfway / "Peri-implantitis" / saved[1]).read_bytes() != same:
+            fail(f"a copy that stops half way must leave no truncated PDF and no .part file, got {left!r}: {text}")
+        if not all(t.endswith(".pdf.part") for t in targets) \
+                or [r["file"] for r in pf.index_rows()] != ["Peri-implantitis/" + saved[1]]:
+            fail(f"a copy must go to a .part name first, and only the whole copy is indexed, got {targets!r}")
+
+        # get writes through the same guard
+        target = halfway / "Peri-implantitis" / "download [PMID 1002].pdf"
+
+        def write_halfway(part: pathlib.Path) -> None:
+            part.write_bytes(b"%PDF-1.4 half")
+            raise OSError(28, "No space left on device")
+        try:
+            pf.into_place(target, write_halfway)
+        except OSError:
+            pass
+        else:
+            fail("into_place must raise the fault again")
+        if target.exists() or target.with_name(target.name + ".part").exists():
+            fail("a write that stops half way must leave no file under the paper's name and no .part file")
+        pf.into_place(target, lambda part: part.write_bytes(b"%PDF-1.4 whole"))
+        if target.read_bytes() != b"%PDF-1.4 whole" or target.with_name(target.name + ".part").exists():
+            fail("a whole write must land under the paper's name with no .part file left")
+        if (ROOT / PAPER_FETCH).read_text(encoding="utf-8").count("into_place(path, lambda part: ") != 2:
+            fail("get and import must both write the PDF through into_place")
+
     help_text = run([sys.executable, PAPER_FETCH, "import", "--help"]).stdout
     for flag in ("--topic-from-parent", "--dry-run"):
         if flag not in help_text:

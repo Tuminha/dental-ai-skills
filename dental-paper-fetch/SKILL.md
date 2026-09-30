@@ -193,8 +193,10 @@ every import goes there:
 F=~/.claude/skills/dental-paper-fetch/scripts/paper_fetch.py   # or the path in this repository
 export PAPERS_DIR="/Volumes/Master HD 2026/Scientific Articles"
 
-# 1. The papers the tool filed in Dropbox, 23 files, topic folders carried over
-python3 "$F" import "$HOME/Library/CloudStorage/Dropbox/Scientific Papers 2026" --topic-from-parent --no-figures
+# 1. The papers the tool filed in Dropbox: the 24 tagged files, topic folders carried over.
+#    The other PDFs in that folder, about 2,140, are a copy of the archive library of step 2.
+find "$HOME/Library/CloudStorage/Dropbox/Scientific Papers 2026" \( -name '*[[]PMID *.pdf' -o -name '*[[]DOI *.pdf' \) -print0 \
+  | xargs -0 python3 "$F" import --topic-from-parent --no-figures
 
 # 2. The older archive library, about 2,500 files in topic folders
 python3 "$F" import "/Volumes/Tuminha Archive/Scientific Papers Library" --topic-from-parent --dry-run --no-figures
@@ -204,6 +206,10 @@ python3 "$F" import "/Volumes/Tuminha Archive/Scientific Papers Library" --topic
 python3 "$F" library stats
 ```
 
+Step 1 takes only the files with a `[PMID n]` or `[DOI ...]` tag in the name (`[[]` is
+how `find` matches a literal bracket; `'*[PMID *.pdf'` matches nothing) and is done in
+about a minute. Run on the whole folder it would take as long as step 2, and step 2 would
+then report most of the archive as `DUPLICATE_BYTES`.
 Step 2 runs one PubMed lookup per file at 3 per second, about 20 minutes for 2,500 files
 for the lookups alone; the license and BibTeX lookups per paper add to that, so plan for
 about an hour, and run `--dry-run` first to see the `NO_MATCH` and `NO_DOI` files without
@@ -214,7 +220,9 @@ the PDFs; `get <PMID> --topic "<Topic>"` on a paper that is already there answer
 drive or folder is imported. `library rebuild-index` writes the index again from the
 files on disk, for a library that was moved or edited by hand. The index is always written
 to a temporary file first and moved into place, so a write that fails half way leaves the
-old index as it was.
+old index as it was. A PDF is copied or downloaded to a `.part` name first in the same
+way, so a copy that stops half way (disk full, the drive unplugged) leaves no truncated
+file under a paper's name.
 
 ## Figures and reuse_hint
 

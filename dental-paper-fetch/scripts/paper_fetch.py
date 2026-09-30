@@ -794,6 +794,21 @@ def make_folder(folder):
         print(f"Created the papers folder: {ROOT}  (set PAPERS_DIR to use another one)")
 
 
+def into_place(path, put):
+    """Call put(part) with a temporary name next to path, then move the file into place
+    under its final name. A copy or download that stops half way (disk full, the drive
+    unplugged, Ctrl-C) leaves no truncated PDF under a paper's name: the part file is
+    removed and the fault is raised again. The name ends in .part, so no listing of the
+    library takes it for a PDF. A complete part file whose final rename fails is kept."""
+    part = path.with_name(path.name + ".part")
+    try:
+        put(part)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    os.replace(part, path)
+
+
 def file_tag(paper):
     return f"PMID {paper['pmid']}" if paper["pmid"] else "DOI " + re.sub(r"[^\w.-]+", "_", paper["doi"])
 
@@ -977,7 +992,7 @@ def get_one(ident, topic, with_figures=True, show_emails=False):
         return ("OPEN_MANUALLY" if failed else "NO_FREE_COPY"), ""
     make_folder(folder)
     path = folder / pdf_name(paper)
-    path.write_bytes(data)
+    into_place(path, lambda part: part.write_bytes(data))
     index_paper(paper, path, url)
     append_bibtex(paper, folder)
     print(f"SAVED  {path}\n       {describe(paper)} | {len(data) // 1024} KB | {source}")
@@ -1142,7 +1157,8 @@ def import_one(pdf, topic, args, seen):
         return "WOULD_IMPORT"
     make_folder(folder)
     # copyfile, not copy2: the library drive may be exFAT, where copying file metadata fails
-    (shutil.move if args.move else shutil.copyfile)(str(pdf), str(path))
+    copy = shutil.move if args.move else shutil.copyfile
+    into_place(path, lambda part: copy(str(pdf), str(part)))
     index_paper(paper, path, "imported: " + pdf.name, digest)
     append_bibtex(paper, folder)
     # Only now, after the copy: a copy that failed, or a file that could not be identified,
