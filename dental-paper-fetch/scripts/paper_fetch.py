@@ -395,9 +395,12 @@ def openaire_pdfs(paper):
                     urls += instance["urls"]
     except NET_ERRORS + (AttributeError, TypeError):
         return []
-    # A PubMed record page is an abstract, not a copy of the paper
+    # A PubMed record page is an abstract, and a doi.org link is a resolver to the
+    # publisher page: neither is a repository copy of the paper
+    skip = {"pubmed.ncbi.nlm.nih.gov", "doi.org", "dx.doi.org"}
     return [u for u in dict.fromkeys(urls)
-            if isinstance(u, str) and u and urllib.parse.urlparse(u).netloc != "pubmed.ncbi.nlm.nih.gov"]
+            if isinstance(u, str) and u
+            and urllib.parse.urlparse(u).netloc.lower().removeprefix("www.") not in skip]
 
 
 def author_emails(pmid):

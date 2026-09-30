@@ -13,6 +13,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import ssl
 import subprocess
 import sys
@@ -24,7 +25,7 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PAPER_FETCH = "dental-paper-fetch/scripts/paper_fetch.py"
-PROTOCOL_VERSION = "2026.05.16"
+PROTOCOL_VERSION = "2026.09.30"
 REQUIRED_SKILLS = {
     "dental-author-disclosures",
     "clinical-evidence-reviewer",
@@ -119,6 +120,30 @@ def test_examples_and_artifact_renderer() -> None:
         ])
         if "Iasella 2003 Ridge Preservation" not in output.read_text(encoding="utf-8"):
             fail("renderer output missing expected text")
+
+        # An optional per-section table renders as an HTML table with every cell escaped
+        payload = {"title": "Table check", "verdict": "v", "metrics": [], "flags": [], "citations": [],
+                   "sections": [{"heading": "Author relationships", "body": "1 of 2 rows externally documented",
+                                 "table": {"columns": ["Author", "Status <b>"],
+                                           "rows": [["A. Author", "declared in paper"],
+                                                    ["<script>alert(1)</script>", "externally documented"]]}}]}
+        payload_path = pathlib.Path(tmp) / "table.json"
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+        table_output = pathlib.Path(tmp) / "table.html"
+        run([
+            sys.executable,
+            "dental-evidence-report-artifact/scripts/render_evidence_report.py",
+            "--input",
+            str(payload_path),
+            "--output",
+            str(table_output),
+        ])
+        rendered = table_output.read_text(encoding="utf-8")
+        if "<th>Author</th>" not in rendered or "<td>declared in paper</td>" not in rendered:
+            fail("a section table must render as an HTML table with its columns and rows")
+        if "<script>" in rendered or "&lt;script&gt;alert(1)&lt;/script&gt;" not in rendered \
+                or "<th>Status &lt;b&gt;</th>" not in rendered:
+            fail("every table heading and cell must be escaped")
 
 
 def test_helper_scripts() -> None:
@@ -512,6 +537,17 @@ def test_paper_fetch_sources_and_safety() -> None:
         if pf.openaire_pdfs(paper) != ["https://repository.example/a.pdf"]:
             fail(f"OpenAIRE: only string links from a list count, got {pf.openaire_pdfs(paper)!r}")
 
+        # Resolver links are not repository copies: doi.org and pubmed instances alone give no candidate
+        resolver_only = {"results": [{"pids": [{"scheme": "doi", "value": "10.1234/invented.601"}], "instances": [
+            {"accessRight": {"label": "OPEN"}, "urls": ["https://doi.org/10.1234/invented.601"]},
+            {"accessRight": {"label": "OPEN"}, "urls": ["https://dx.doi.org/10.1234/invented.601",
+                                                        "https://pubmed.ncbi.nlm.nih.gov/601"]}]}]}
+        pf.http_get = FakeNetwork([("api.openaire.eu/graph/v3/research-products", json.dumps(resolver_only).encode())])
+        if pf.openaire_pdfs(paper) != []:
+            fail(f"OpenAIRE: a doi.org or dx.doi.org link is a resolver, not a copy, got {pf.openaire_pdfs(paper)!r}")
+        if [label for label, _ in pf.pdf_candidates(paper)]:
+            fail("a record with only doi.org and pubmed instances must yield no candidate")
+
         results = ([("SAVED", "PubMed Central")] * 10 + [("SAVED", "OpenAlex")] * 2
                    + [("OPEN_MANUALLY", "")] * 8 + [("NO_FREE_COPY", "")] * 20)
         expected = "SAVED 12: PubMed Central 10, OpenAlex 2 | OPEN_MANUALLY 8 | NO_FREE_COPY 20"
@@ -550,6 +586,31 @@ def test_paper_fetch_sources_and_safety() -> None:
             fail("without poppler, pdf_figures must return no figures")
         if "brew install poppler" not in calls[0][1] or "poppler-utils" not in calls[0][1] or calls[1][1]:
             fail(f"without poppler, the install help must print once, got {[t for _, t in calls]!r}")
+
+
+def test_iasella_example_interval() -> None:
+    """The example's CI note states n per group, df and a z-based screen that the calculator reproduces."""
+    data = json.loads((ROOT / "examples" / "iasella-statistical-forensics-report-data.json").read_text(encoding="utf-8"))
+    metrics = {metric.get("label"): metric for metric in data["metrics"]}
+    note = str(metrics.get("Approx CI", {}).get("note", ""))
+    n = re.search(r"n = (\d+) per group", note)
+    screen = re.search(r"z-based screen[^0-9-]*(-?\d+\.\d) to (-?\d+\.\d) mm", note)
+    if not n or not screen or "df = " not in note:
+        fail(f"the Approx CI note must state n per group, df and the z-based screen, got {note!r}")
+    groups = []
+    for label in ("Horizontal Change RP", "Horizontal Change EXT"):
+        value = re.search(r"(-?\d+\.\d) \+/- (\d+\.\d) mm", str(metrics.get(label, {}).get("value", "")))
+        if not value:
+            fail(f"metric {label} must read like '-1.2 +/- 0.9 mm'")
+        groups.append((value.group(1), value.group(2)))
+    result = json.loads(run([
+        sys.executable, "dental-statistical-forensics/scripts/stats_forensics_calculator.py", "continuous",
+        "--mean-a", groups[0][0], "--sd-a", groups[0][1], "--n-a", n.group(1),
+        "--mean-b", groups[1][0], "--sd-b", groups[1][1], "--n-b", n.group(1),
+    ]).stdout)
+    stated = [float(screen.group(1)), float(screen.group(2))]
+    if any(abs(a - b) > 0.1 for a, b in zip(stated, result["ci95"])):
+        fail(f"the z-based screen {stated} does not match the calculator's {result['ci95']} within 0.1 mm")
 
 
 def test_fixtures() -> None:
@@ -631,6 +692,7 @@ TESTS = [
     test_paper_fetch_notice_pdf,
     test_fixtures,
     test_iasella_golden_concepts,
+    test_iasella_example_interval,
 ]
 
 

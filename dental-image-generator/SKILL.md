@@ -7,7 +7,7 @@ effort: high
 
 # Dental Image Generator — AI Clinical Illustration Skill
 
-**Skill protocol version:** 2026.05.16
+**Skill protocol version:** 2026.09.30
 
 ## Identity
 
