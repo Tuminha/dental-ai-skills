@@ -419,14 +419,14 @@ The `test_paper_fetch_*` tests after `test_paper_fetch_offline` (seven here, fiv
 - [ ] `test_paper_fetch_webp_figures`: a `.webp` figure from the bucket is saved with its label and caption
 - [ ] `test_paper_fetch_pmid_without_doi`: a PMID with no DOI in PubMed gets its DOI from one OpenAlex call, `works/pmid:<pmid>`, a record with another title is refused, and an answer of `null` or `[]` leaves the paper without a DOI
 - [ ] `test_paper_fetch_certificate_retry`: a certificate error is retried once with curl, with `-q` first, `--fail`, and never `-k` or `--insecure`; when curl fails the check too (exit 60), `OPEN_MANUALLY` names the certificate problem; a time limit (curl exit 28, or Python) says "did not answer in time"; an HTTP error (exit 22) says the site blocks scripts
-- [ ] `test_paper_fetch_import_needs_yes`: `import` with no file names lists the PDFs and copies nothing without `--yes`; the list shows the tag in a name or the DOI inside, and says the title would be tried for a file with neither; no request is sent
+- [ ] `test_paper_fetch_import_needs_yes`: `import` with no file names lists the PDFs and copies nothing without `--yes`
 - [ ] `test_paper_fetch_sources_and_safety`: OpenAIRE links of the same DOI only and string links from a list only, the PDF marker check, the count line, the refused redirect for the CORE key, the poppler time limit (figures and `import`) and the one-time install note
 - [ ] `test_paper_fetch_notice_pdf`: a one-page PDF under 60 KB is a repository notice, never saved; `OPEN_MANUALLY` says so; a two-page PDF is saved as before
 
 ### PF Test 8: Library Mode (offline)
 **Command, from the repo root:** `python3 scripts/smoke_test_repo.py`
 
-Five more tests with the same fake network. The import test builds a source folder with a tagged PDF, a second scan of the same paper, a byte-for-byte copy under another name, a file whose title matches nothing closely, a file with no identifier at all, a file with a DOI inside, and a Finder metadata file.
+Five more tests with the same fake network. The import test builds a source folder with a tagged PDF, a second scan of the same paper, a byte-for-byte copy under another name, a file whose title matches nothing closely, a file with no identifier at all, a file with a DOI inside, and a Finder metadata file. `test_paper_fetch_import_needs_yes` in PF Test 7 also checks that the Downloads list shows the tag in a name or the DOI inside, says the title would be tried for a file with neither, and sends no request.
 
 **Check:**
 - [ ] `test_paper_fetch_mount_guard`: with `PAPERS_DIR` under `/Volumes/<name>/` and no such drive, `topics`, `import` and `get` exit 1 with `The drive <name> is not connected. Connect it or set PAPERS_DIR.`, nothing is created under `/Volumes`, a connected drive is checked once and a folder elsewhere never
