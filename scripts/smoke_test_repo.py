@@ -453,9 +453,11 @@ def test_paper_fetch_import_needs_yes() -> None:
         home, papers = pathlib.Path(tmp) / "home", pathlib.Path(tmp) / "papers"
         (home / "Downloads").mkdir(parents=True)
         (home / "Downloads" / "invented-paper.pdf").write_bytes(b"%PDF-1.4\n")
+        (home / "Downloads" / "tagged [PMID 502].pdf").write_bytes(b"%PDF-1.4\n")
+        (home / "Downloads" / "untitled scan.pdf").write_bytes(b"%PDF-1.4\n")
         pf = load_paper_fetch(papers)
         pf.shutil = tools_found("pdftotext", "pdfinfo")
-        pf.doi_in_pdf = lambda pdf: "10.1234/invented.501"
+        pf.doi_in_pdf = lambda pdf: "10.1234/invented.501" if pdf.name == "invented-paper.pdf" else ""
         pf.time = types.SimpleNamespace(sleep=lambda seconds: None, time=__import__("time").time)
         args = types.SimpleNamespace(files=[], topic="Test topic", topic_from_parent=False, days=1,
                                      move=False, yes=False, dry_run=False, no_figures=True)
@@ -473,6 +475,10 @@ def test_paper_fetch_import_needs_yes() -> None:
             fail(f"import with no file names must list the files and ask for --yes, got {code}: {text}")
         if "10.1234/invented.501" not in text:
             fail("the list must show the DOI found inside each PDF")
+        if "WOULD_IMPORT  " + str(home / "Downloads" / "tagged [PMID 502].pdf") + " | tag in the name: PMID 502" not in text:
+            fail(f"a tagged PDF without a DOI inside would be imported with --yes, so the list must say so, got: {text}")
+        if "NO_DOI        " + str(home / "Downloads" / "untitled scan.pdf") not in text or "title" not in text:
+            fail(f"a PDF with no tag and no DOI must say the title would be tried, got: {text}")
         if papers.exists() or pf.http_get.calls:
             fail("import without --yes must copy nothing and send no request")
     if "--yes" not in run([sys.executable, PAPER_FETCH, "import", "--help"]).stdout:
@@ -676,15 +682,39 @@ def test_paper_fetch_import_folder() -> None:
         if code != 0 or "IMPORTED  " not in text or not (stale / "Peri-implantitis").exists():
             fail(f"a row whose file is gone must not count as a duplicate, got {code}: {text}")
 
-        # A relative path keeps a parent folder name: "." is the folder itself, not an empty name
+        # A relative path keeps a parent folder name: "." and ".." are folders, not empty names
         cwd = os.getcwd()
-        os.chdir(source)
+        (source / "sub").mkdir()
+        os.chdir(source / "sub")
         try:
-            listed = pf.pdf_files(["."])
+            listed = pf.pdf_files(["."]), pf.pdf_files([".."])
         finally:
             os.chdir(cwd)
-        if not listed or not all(f.is_absolute() and f.parent.name == "Peri-implantitis" for f in listed):
-            fail(f"pdf_files must give absolute paths so --topic-from-parent has a name, got {listed!r}")
+        if listed[0] or not listed[1] or not all(f.is_absolute() and f.parent.name == "Peri-implantitis"
+                                                 for f in listed[1]):
+            fail(f"pdf_files must give absolute, normalized paths so --topic-from-parent has a name, got {listed!r}")
+
+        # A copy that fails is ERROR, and the next copy of the same paper is still imported
+        failing = pathlib.Path(tmp) / "papers-failing"
+        second = pathlib.Path(tmp) / "second" / "Peri-implantitis"
+        second.mkdir(parents=True)
+        (second / "a [PMID 1001].pdf").write_bytes(same)
+        (second / "b [PMID 1001].pdf").write_bytes(same)
+        pf = import_test_module(failing)
+        real_copy, calls = pf.shutil.copyfile, []
+
+        def copy_once_failing(src: str, dst: str) -> None:
+            calls.append(src)
+            if len(calls) == 1:
+                raise OSError(28, "No space left on device")
+            real_copy(src, dst)
+        pf.shutil.copyfile = copy_once_failing
+        args_second = types.SimpleNamespace(**{**vars(args), "files": [str(second)]})
+        code, text = printed(pf.cmd_import, args_second)
+        if text.strip().splitlines()[-1] != "IMPORTED 1 | EXISTS 0 | DUPLICATE_BYTES 0 | NO_MATCH 0 | NO_DOI 0 | ERROR 1":
+            fail(f"a failed copy must be ERROR and must not make the next copy a duplicate, got: {text}")
+        if "ERROR  " + str(second / "a [PMID 1001].pdf") not in text or "No space left" not in text:
+            fail(f"the ERROR line must name the file and the fault, got: {text}")
 
     help_text = run([sys.executable, PAPER_FETCH, "import", "--help"]).stdout
     for flag in ("--topic-from-parent", "--dry-run"):
@@ -754,6 +784,18 @@ def test_paper_fetch_library_commands() -> None:
         last = text.strip().splitlines()[-1]
         if "kept 2 | added 3 | no metadata 2 | dropped 1 | files without a tag 1" not in last or "NO_TAG  Topic B/no tag here.pdf" not in text:
             fail(f"rebuild-index must report kept, added, no metadata, dropped and untagged, got: {text}")
+
+        # The next rebuild resolves placeholder rows again: the DOI is known now, the PMID still is not
+        answers = list(pf.http_get.answers) + [
+            ("id=1007", pubmed_summary("1007", "Invented paper that resolves on the second try", "10.9999/nothing")),
+            ("nothing%5Bdoi%5D", pubmed_found("1007"))]
+        pf.http_get = FakeNetwork([a for a in answers if a[0] != "nothing%5Bdoi%5D" or a[1] != pubmed_found()])
+        code, text = printed(pf.rebuild_index)
+        rows = pf.index_rows()
+        if code != 0 or rows[4]["title"] != "Invented paper that resolves on the second try" or rows[4]["doi"] != "10.9999/nothing":
+            fail(f"a placeholder row must be resolved again on the next rebuild, got {rows[4]!r}: {text}")
+        if rows[5]["title"] or "kept 5 | added 1 | no metadata 1 | dropped 0" not in text.strip().splitlines()[-1]:
+            fail(f"a placeholder that still resolves nowhere stays one, and full rows are kept, got: {text}")
 
         code, text = printed(pf.library_stats)
         lines = text.splitlines()

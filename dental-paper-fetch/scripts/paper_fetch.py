@@ -1058,7 +1058,8 @@ def pdf_files(paths):
     """The PDFs named on the command line. A folder gives every PDF under it, subfolders
     included. Names that start with a dot (Finder metadata on external drives) are skipped."""
     files = []
-    for path in (Path(p).expanduser().absolute() for p in paths):  # "." must have a parent name
+    # "." and ".." must give real folder names, so paths are made absolute and normalized
+    for path in (Path(os.path.normpath(Path(p).expanduser().absolute())) for p in paths):
         if path.is_dir():
             files += sorted(f for f in path.rglob("*") if f.is_file() and f.suffix.lower() == ".pdf"
                             and not f.name.startswith("."))
@@ -1112,24 +1113,28 @@ def import_one(pdf, topic, args, seen):
               f"       To file it by hand: rename it with \"[PMID n]\", put it in the topic folder, "
               f"then run: python3 paper_fetch.py get <PMID> --topic \"{topic}\"")
         return result
-    # Only now: a copy that could not be identified must not block a later, tagged copy
-    seen["digests"].add(digest)
     existing = find_existing(paper)
     if existing or file_tag(paper) in seen["tags"]:
         where = existing or f"[{file_tag(paper)}] from an earlier file in this run"
         print(f"EXISTS  {where}  (left {pdf.name} where it is)")
+        seen["digests"].add(digest)
         return "EXISTS"
-    seen["tags"].add(file_tag(paper))
     folder = topic_dir(topic)
     path = folder / pdf_name(paper)
     if args.dry_run:
         print(f"WOULD_IMPORT  {pdf}\n       -> {path}\n       {describe(paper)}")
+        seen["tags"].add(file_tag(paper))
+        seen["digests"].add(digest)
         return "WOULD_IMPORT"
     make_folder(folder)
     # copyfile, not copy2: the library drive may be exFAT, where copying file metadata fails
     (shutil.move if args.move else shutil.copyfile)(str(pdf), str(path))
     index_paper(paper, path, "imported: " + pdf.name, digest)
     append_bibtex(paper, folder)
+    # Only now, after the copy: a copy that failed, or a file that could not be identified,
+    # must not make a later copy of the same paper look like a duplicate
+    seen["tags"].add(file_tag(paper))
+    seen["digests"].add(digest)
     print(f"IMPORTED  {path}\n       {describe(paper)} | from {pdf}")
     if not args.no_figures:
         report_figures(paper, path)
@@ -1161,9 +1166,14 @@ def cmd_import(args):
             print(f"DRY_RUN  {len(files)} PDF file(s) in {downloads} from the last {args.days:g} "
                   f"day(s). Nothing was {'moved' if args.move else 'copied'}.")
             for f in files:
-                doi = doi_in_pdf(f)
-                print(f"       WOULD_IMPORT  {f} | DOI inside: {doi}" if doi else
-                      f"       NO_DOI        {f} | no DOI inside, it would be skipped")
+                tag, doi = tag_in_name(f.name), doi_in_pdf(f)
+                if tag:
+                    print(f"       WOULD_IMPORT  {f} | tag in the name: {tag[0].upper()} {tag[1]}")
+                elif doi:
+                    print(f"       WOULD_IMPORT  {f} | DOI inside: {doi}")
+                else:
+                    print(f"       NO_DOI        {f} | no tag in the name and no DOI inside: the title "
+                          f"in the name would be tried, and the file is skipped unless a paper matches it closely")
             print("       Check the list: a personal document that cites a paper has a DOI inside too.\n"
                   "       Then name the files to import, or run the same command with --yes.")
             return 2
@@ -1176,8 +1186,8 @@ def cmd_import(args):
     for f in files:
         try:
             result = import_one(f, f.parent.name if args.topic_from_parent else args.topic, args, seen)
-        except NET_ERRORS as e:  # one bad answer must not stop a run over a whole folder
-            print(f"ERROR  {f} | network problem or bad answer: {e}")
+        except NET_ERRORS as e:  # one bad answer or failed copy must not stop a whole folder
+            print(f"ERROR  {f} | not imported: {type(e).__name__}: {e}")
             result = "ERROR"
         counts[result] += 1
     print(import_count_line(counts, args.dry_run))
@@ -1261,9 +1271,10 @@ def rebuild_index():
         row = by_file.get(rel) or by_sha.get(digest) or by_tag.get(tag)
         if row is not None:
             kept.add(id(row))
-            rows.append({**row, "file": rel, "topic": f.parent.name, "sha256": digest})
-            counts["KEPT"] += 1
-            continue
+            if row.get("title"):  # a row without a title is a placeholder: resolve it again
+                rows.append({**row, "file": rel, "topic": f.parent.name, "sha256": digest})
+                counts["KEPT"] += 1
+                continue
         if tag not in resolved:
             paper = resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1])
             if not paper and tag[0] == "doi":

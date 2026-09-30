@@ -120,8 +120,8 @@ indexed twice, even under two names.
 `import` prints one line per file: `IMPORTED`, `EXISTS` (the paper is on disk, under any
 name), `DUPLICATE_BYTES` (a file with the same sha256 is in the index), `NO_MATCH` (no tag
 and no DOI, and the closest title found is below 0.85 of 1.00; the line names it),
-`NO_DOI` (nothing found at all), `NOT_A_PDF`, `UNREADABLE` or `ERROR` (a network fault on
-that file; the run goes on). It ends with one count line:
+`NO_DOI` (nothing found at all), `NOT_A_PDF`, `UNREADABLE` or `ERROR` (a network fault or
+a failed copy on that file; nothing of it is saved and the run goes on). It ends with one count line:
 `IMPORTED n | EXISTS n | DUPLICATE_BYTES n | NO_MATCH n | NO_DOI n`. With `--dry-run` the
 lines say `WOULD_IMPORT` and the count line starts with `DRY_RUN`; nothing is written.
 With no file names it lists the PDFs in `~/Downloads` as `WOULD_IMPORT` or `NO_DOI` and
@@ -159,9 +159,10 @@ paper at a time. The user decides each step.
 4. **File it.** Run `import <file.pdf> --topic "<Topic>"` on the PDF the user obtained. It
    reads the DOI inside the PDF, renames and files it, adds BibTeX and extracts figures.
    Name the files. With no file names, `import` lists every PDF in `~/Downloads` from the
-   last day with the DOI found inside each, and copies nothing. A personal document that
-   cites a paper has a DOI inside too. Check the list with the user, then name the files,
-   or run the same command with `--yes` to import the whole list.
+   last day with the tag in its name or the DOI found inside it, and copies nothing. A
+   personal document that cites a paper has a DOI inside too. Check the list with the
+   user, then name the files, or run the same command with `--yes` to import the whole
+   list.
 
 The tool stops at any bot check. So does the assistant. On a CAPTCHA, a "verify you are
 human" page, a login wall or an upgrade prompt: stop and give the user the link.
