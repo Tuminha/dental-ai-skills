@@ -1,6 +1,6 @@
 interface:
   display_name: "Dental Paper Fetch"
-  short_description: "Free full-text PDFs and figures, legal sources"
+  short_description: "Free full-text PDFs and figures, legal sources, one library on disk"
   brand_color: "#1D4ED8"
   default_prompt: "Use $dental-paper-fetch to get the free full-text PDF and figures of this paper from legal open-access sources, and report the result line for each paper."
 policy:

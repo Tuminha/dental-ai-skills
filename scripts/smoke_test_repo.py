@@ -480,12 +480,14 @@ def test_paper_fetch_import_needs_yes() -> None:
         home, papers = pathlib.Path(tmp) / "home", pathlib.Path(tmp) / "papers"
         (home / "Downloads").mkdir(parents=True)
         (home / "Downloads" / "invented-paper.pdf").write_bytes(b"%PDF-1.4\n")
+        (home / "Downloads" / "tagged [PMID 502].pdf").write_bytes(b"%PDF-1.4\n")
+        (home / "Downloads" / "untitled scan.pdf").write_bytes(b"%PDF-1.4\n")
         pf = load_paper_fetch(papers)
         pf.shutil = tools_found("pdftotext", "pdfinfo")
-        pf.doi_in_pdf = lambda pdf: "10.1234/invented.501"
+        pf.doi_in_pdf = lambda pdf: "10.1234/invented.501" if pdf.name == "invented-paper.pdf" else ""
         pf.time = types.SimpleNamespace(sleep=lambda seconds: None, time=__import__("time").time)
-        args = types.SimpleNamespace(files=[], topic="Test topic", days=1, move=False, yes=False,
-                                     no_figures=True)
+        args = types.SimpleNamespace(files=[], topic="Test topic", topic_from_parent=False, days=1,
+                                     move=False, yes=False, dry_run=False, no_figures=True)
         keep = {name: os.environ.get(name) for name in ("HOME", "USERPROFILE")}
         os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
         try:
@@ -500,10 +502,592 @@ def test_paper_fetch_import_needs_yes() -> None:
             fail(f"import with no file names must list the files and ask for --yes, got {code}: {text}")
         if "10.1234/invented.501" not in text:
             fail("the list must show the DOI found inside each PDF")
+        if "WOULD_IMPORT  " + str(home / "Downloads" / "tagged [PMID 502].pdf") + " | tag in the name: PMID 502" not in text:
+            fail(f"a tagged PDF without a DOI inside would be imported with --yes, so the list must say so, got: {text}")
+        if "NO_DOI        " + str(home / "Downloads" / "untitled scan.pdf") not in text or "title" not in text:
+            fail(f"a PDF with no tag and no DOI must say the title would be tried, got: {text}")
         if papers.exists() or pf.http_get.calls:
             fail("import without --yes must copy nothing and send no request")
     if "--yes" not in run([sys.executable, PAPER_FETCH, "import", "--help"]).stdout:
         fail("paper_fetch.py import --help does not list --yes")
+
+
+def test_paper_fetch_mount_guard() -> None:
+    """PAPERS_DIR on an external drive that is not connected: one sentence, exit 1, nothing
+    made under /Volumes. A connected drive is checked once; a folder elsewhere never."""
+    root = "/Volumes/Invented Drive/Scientific Articles"
+    sentence = "The drive Invented Drive is not connected. Connect it or set PAPERS_DIR."
+    for command in (["topics"], ["import", "--topic", "T", "--yes"], ["get", "1", "--topic", "T"]):
+        done = subprocess.run([sys.executable, PAPER_FETCH, *command], cwd=ROOT, text=True,
+                              capture_output=True, env={**os.environ, "PAPERS_DIR": root})
+        if done.returncode != 1 or done.stderr.strip() != sentence or done.stdout:
+            fail(f"{command[0]} on a missing drive must exit 1 with one sentence, "
+                 f"got {done.returncode}: {done.stderr!r} {done.stdout!r}")
+    if pathlib.Path("/Volumes/Invented Drive").exists():
+        fail("the guard must not create anything under /Volumes")
+    pf = load_paper_fetch(pathlib.Path(root))
+    asked: list[str] = []
+    pf.os = types.SimpleNamespace(environ=os.environ, path=types.SimpleNamespace(
+        ismount=lambda path: asked.append(str(path)) or True))
+    pf.require_drive()
+    if asked != ["/Volumes/Invented Drive"]:
+        fail(f"the guard must ask whether /Volumes/<name> is a mount point, got {asked!r}")
+    pf.ROOT = pathlib.Path(tempfile.gettempdir()) / "papers"
+    asked.clear()
+    pf.require_drive()
+    if asked:
+        fail("a folder outside /Volumes must not be checked for a mount point")
+
+
+def test_paper_fetch_file_names() -> None:
+    """The file name carries year, first author, title (80 characters at most), journal (40
+    at most) and the tag last. An older name without the journal is still found."""
+    with tempfile.TemporaryDirectory() as tmp:
+        papers = pathlib.Path(tmp) / "papers"
+        pf = load_paper_fetch(papers)
+        paper = invented_paper(pmid="801", journal="Invented J Periodontol: Part B/2")
+        name = pf.pdf_name(paper)
+        if name != ("2020 Example - Invented test paper on bone levels - "
+                    "Invented J Periodontol Part B 2 [PMID 801].pdf"):
+            fail(f"unexpected file name: {name!r}")
+        long = invented_paper(doi="10.1234/invented.802", title="T" * 100, journal="J" * 50)
+        name = pf.pdf_name(long)
+        if name != f"2020 Example - {'T' * 80} - {'J' * 40} [DOI 10.1234_invented.802].pdf":
+            fail(f"title and journal must be cut at 80 and 40 characters, got {name!r}")
+        no_journal = pf.pdf_name(invented_paper(pmid="803", journal=""))
+        if no_journal != "2020 Example - Invented test paper on bone levels [PMID 803].pdf":
+            fail(f"without a journal the name has no empty part, got {no_journal!r}")
+        topic = papers / "Test topic"
+        topic.mkdir(parents=True)
+        old = topic / "2020 Example - Invented test paper on bone levels [PMID 801].pdf"
+        old.write_bytes(b"%PDF-1.4\n")
+        if pf.find_existing(paper) != old:
+            fail("a PDF saved under the older name, without the journal, must still count as EXISTS")
+        (topic / "._2020 Example - Other paper [PMID 804].pdf").write_bytes(b"Finder metadata on exFAT")
+        if pf.find_existing(invented_paper(pmid="804")) is not None:
+            fail("a ._ metadata file that carries the tag must not count as the paper")
+
+
+def test_paper_fetch_index_columns() -> None:
+    """Every row gets the file's sha256 and the OpenAlex open-access status; an older index
+    is rewritten with the new columns; the same bytes under another name count as indexed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        papers = pathlib.Path(tmp) / "papers"
+        topic = papers / "Test topic"
+        topic.mkdir(parents=True)
+        (papers / "_index.csv").write_text("saved_at,topic,pmid,doi,file\n"
+                                           "2026-01-01T00:00:00,Test topic,900,,old.pdf\n", encoding="utf-8")
+        pf = load_paper_fetch(papers)
+        pf.lookup_license = lambda paper: "CC BY"
+        pf.OPENALEX["10.1234/invented.901"] = {"open_access": {"oa_status": "gold"}}
+        pdf = topic / "2020 Example - Invented test paper on bone levels [PMID 901].pdf"
+        pdf.write_bytes(b"%PDF-1.4 invented bytes\n")
+        pf.index_paper(invented_paper(pmid="901", doi="10.1234/invented.901"), pdf, "test")
+        rows = pf.index_rows()
+        if [r["pmid"] for r in rows] != ["900", "901"] or rows[0]["sha256"] != "" or rows[0]["oa_status"] != "":
+            fail(f"the older row must be kept with empty new columns, got {rows!r}")
+        expected = pf.sha256_of(pdf)
+        if rows[1]["sha256"] != expected or rows[1]["oa_status"] != "gold" or rows[1]["license"] != "CC BY":
+            fail(f"the new row must carry sha256, oa_status and license, got {rows[1]!r}")
+        with open(papers / "_index.csv", encoding="utf-8") as fh:
+            if fh.readline().strip().split(",") != pf.INDEX_FIELDS:
+                fail("the index header must list the current columns after a column change")
+        if not pf.in_index(digest=expected) or pf.in_index(digest="0" * 64):
+            fail("in_index must match a file by its sha256")
+        if not pf.in_index(invented_paper(pmid="900")) or pf.in_index(invented_paper(pmid="902")):
+            fail("in_index must still match a PMID")
+        if pf.oa_status(invented_paper(doi="10.9999/never.read")) != "unknown":
+            fail("a paper whose OpenAlex record was not read has oa_status unknown")
+        if pf.http_get.calls:
+            fail("indexing must read no OpenAlex record on its own")
+
+        # A column added by hand survives an append and a rebuild
+        pf.write_index([{**rows[1], "notes": "read on Monday"}])
+        pdf2 = topic / "2020 Example - Second invented paper [PMID 902].pdf"
+        pdf2.write_bytes(b"%PDF-1.4 second invented bytes\n")
+        pf.index_paper(invented_paper(pmid="902", doi="10.1234/invented.902"), pdf2, "test")
+        rows = pf.index_rows()
+        with open(papers / "_index.csv", encoding="utf-8") as fh:
+            header = fh.readline().strip().split(",")
+        if header != pf.INDEX_FIELDS + ["notes"] or [r["notes"] for r in rows] != ["read on Monday", ""]:
+            fail(f"a hand-added column must survive an append, got {header!r} and {rows!r}")
+        code, text = printed(pf.rebuild_index)
+        rows = pf.index_rows()
+        if code != 0 or [r["pmid"] for r in rows] != ["901", "902"] or [r["notes"] for r in rows] != ["read on Monday", ""]:
+            fail(f"a hand-added column must survive rebuild-index, got {code}: {rows!r}\n{text}")
+        if pf.http_get.calls:
+            fail("a rebuild of known rows must make no lookup")
+
+        # A rewrite that fails half way leaves the old index as it was, and no temporary file
+        before = (papers / "_index.csv").read_bytes()
+
+        class Boom:
+            def __init__(self, fh: object, **kwargs: object) -> None:
+                self.fh = fh
+
+            def writeheader(self) -> None:
+                self.fh.write("header\n")
+
+            def writerows(self, rows: object) -> None:
+                raise OSError(28, "No space left on device")
+        pf.csv = types.SimpleNamespace(DictWriter=Boom, DictReader=__import__("csv").DictReader)
+        try:
+            pf.write_index(rows)
+        except OSError:
+            pass
+        else:
+            fail("a failed write must raise")
+        if (papers / "_index.csv").read_bytes() != before or list(papers.glob("*.tmp")):
+            fail("a rewrite that fails must leave the old index intact and no temporary file")
+
+
+def pubmed_summary(pmid: str, title: str, doi: str = "") -> bytes:
+    ids = [{"idtype": "pubmed", "value": pmid}] + ([{"idtype": "doi", "value": doi}] if doi else [])
+    return json.dumps({"result": {"uids": [pmid], pmid: {
+        "uid": pmid, "title": title + ".", "source": "Invented J", "pubdate": "2020 Oct",
+        "authors": [{"name": "Example A"}], "articleids": ids}}}).encode()
+
+
+def pubmed_found(*pmids: str) -> bytes:
+    return json.dumps({"esearchresult": {"idlist": list(pmids), "count": str(len(pmids))}}).encode()
+
+
+def import_test_module(papers: pathlib.Path):
+    """paper_fetch with a fake PubMed, a fake DOI reader and a shutil that only copies."""
+    pf = load_paper_fetch(papers, [
+        ("id=1001", pubmed_summary("1001", "Invented test paper on bone levels", "10.1234/invented.1001")),
+        ("id=1002", pubmed_summary("1002", "Completely different paper about something else")),
+        ("id=1003", pubmed_summary("1003", "Invented scan with a DOI inside", "10.1234/invented.1003")),
+        ("invented.1003%5Bdoi%5D", pubmed_found("1003")),
+        ("Some+other+invented+title", pubmed_found("1002")),
+        ("made-up-title", pubmed_found()),
+        ("1+unknown+copy", pubmed_found()),
+        ("api.crossref.org", b'{"message": {"items": []}}'),
+    ])
+    pf.doi_in_pdf = lambda pdf: "10.1234/invented.1003" if pdf.name == "scan.pdf" else ""
+    pf.shutil = types.SimpleNamespace(which=lambda tool, path=None: "/usr/bin/pdftotext" if tool == "pdftotext" else None,
+                                      copyfile=__import__("shutil").copyfile, copy2=tools_found().copy2,
+                                      move=tools_found().move)
+    return pf
+
+
+def test_paper_fetch_import_folder() -> None:
+    """import takes a folder, files each PDF by the tag in its name, the DOI inside or a close
+    title match, skips the same bytes and the same paper, never guesses, never deletes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        source = pathlib.Path(tmp) / "source" / "Peri-implantitis"
+        source.mkdir(parents=True)
+        same, other = b"%PDF-1.4 the same bytes\n", b"%PDF-1.4 another scan\n"
+        (source / "1 unknown copy of the same.pdf").write_bytes(same)  # sorts first, matches nothing
+        (source / "2020 - Example - Invented test paper on bone levels [PMID 1001].pdf").write_bytes(same)
+        (source / "Another scan [PMID 1001].pdf").write_bytes(other)
+        (source / "Some other invented title far away.pdf").write_bytes(b"%PDF-1.4 no match\n")
+        (source / "copy of the same.pdf").write_bytes(same)
+        (source / "made-up-title.pdf").write_bytes(b"%PDF-1.4 nothing\n")
+        (source / "scan.pdf").write_bytes(b"%PDF-1.4 doi inside\n")
+        (source / "._hidden.pdf").write_bytes(b"Finder metadata, not a PDF")
+        before = sorted(f.name for f in source.iterdir())
+        papers = pathlib.Path(tmp) / "papers"
+        args = types.SimpleNamespace(files=[str(source.parent)], topic=None, topic_from_parent=True, days=1,
+                                     move=False, yes=False, dry_run=True, no_figures=True)
+
+        # A dry run says what would happen and writes nothing
+        pf = import_test_module(papers)
+        code, text = printed(pf.cmd_import, args)
+        expected = "DRY_RUN  WOULD_IMPORT 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 2"
+        if code != 2 or text.strip().splitlines()[-1] != expected:
+            fail(f"dry run: expected exit 2 and {expected!r}, got {code}: {text}")
+        if "NO_DOI  " + str(source / "1 unknown copy of the same.pdf") not in text:
+            fail("a copy that cannot be identified is NO_DOI, and must not block the tagged copy after it")
+        if papers.exists() or "._hidden" in text:
+            fail("a dry run must write nothing, and Finder metadata files are skipped")
+        if "-> " + str(papers / "Peri-implantitis" / "2020 Example - Invented test paper on bone levels - Invented J [PMID 1001].pdf") not in text:
+            fail(f"the dry run must show the target name with the parent folder as topic, got: {text}")
+
+        # The real run copies, indexes with sha256 and leaves every source file in place
+        args.dry_run = False
+        pf = import_test_module(papers)
+        code, text = printed(pf.cmd_import, args)
+        expected = "IMPORTED 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 2"
+        if code != 2 or text.strip().splitlines()[-1] != expected:
+            fail(f"import: expected exit 2 and {expected!r}, got {code}: {text}")
+        saved = sorted(f.name for f in (papers / "Peri-implantitis").iterdir() if f.suffix == ".pdf")
+        if saved != ["2020 Example - Invented scan with a DOI inside - Invented J [PMID 1003].pdf",
+                     "2020 Example - Invented test paper on bone levels - Invented J [PMID 1001].pdf"]:
+            fail(f"unexpected files in the topic folder: {saved!r}")
+        if (papers / "Peri-implantitis" / saved[1]).read_bytes() != same:
+            fail("the imported file must hold the source bytes")
+        if sorted(f.name for f in source.iterdir()) != before:
+            fail("import must never delete or move a source file")
+        rows = pf.index_rows()
+        if [r["pmid"] for r in rows] != ["1001", "1003"] or any(len(r["sha256"]) != 64 for r in rows):
+            fail(f"the index must hold one row per imported file with its sha256, got {rows!r}")
+        if 'closest title found: "Completely different paper about something else"' not in text:
+            fail(f"NO_MATCH must name the closest title and its score, got: {text}")
+        if "no DOI inside and no paper found for the title" not in text:
+            fail(f"NO_DOI must say what was tried, got: {text}")
+        if "EXISTS  " + str(papers / "Peri-implantitis" / saved[1]) not in text:
+            fail(f"a second scan of the same paper must be EXISTS, got: {text}")
+
+        # Run again: every file already in the library is the same bytes, so no lookup is made for it
+        pf = import_test_module(papers)
+        code, text = printed(pf.cmd_import, args)
+        if text.strip().splitlines()[-1] != "IMPORTED 0 | EXISTS 1 | DUPLICATE_BYTES 4 | NO_MATCH 1 | NO_DOI 1":
+            fail(f"a second import of the same folder must skip by bytes, got: {text}")
+        if any("id=1003" in call for call in pf.http_get.calls):
+            fail("a file whose bytes are in the index must cost no lookup")
+
+        # A stale index row, its file deleted by hand, must not make the same bytes DUPLICATE_BYTES
+        stale = pathlib.Path(tmp) / "papers-stale"
+        pf = import_test_module(stale)
+        stale.mkdir()
+        pf.write_index([{"saved_at": "2026-01-01T00:00:00", "topic": "Gone", "pmid": "1001",
+                         "file": "Gone/deleted by hand [PMID 1001].pdf", "sha256": pf.sha256_of(source / "scan.pdf")}])
+        args_scan = types.SimpleNamespace(**{**vars(args), "files": [str(source / "scan.pdf")]})
+        code, text = printed(pf.cmd_import, args_scan)
+        if code != 0 or "IMPORTED  " not in text or not (stale / "Peri-implantitis").exists():
+            fail(f"a row whose file is gone must not count as a duplicate, got {code}: {text}")
+
+        # A relative path keeps a parent folder name: "." and ".." are folders, not empty names
+        cwd = os.getcwd()
+        (source / "sub").mkdir()
+        os.chdir(source / "sub")
+        try:
+            listed = pf.pdf_files(["."]), pf.pdf_files([".."])
+        finally:
+            os.chdir(cwd)
+        if listed[0] or not listed[1] or not all(f.is_absolute() and f.parent.name == "Peri-implantitis"
+                                                 for f in listed[1]):
+            fail(f"pdf_files must give absolute, normalized paths so --topic-from-parent has a name, got {listed!r}")
+
+        # A folder that cannot be read is UNREADABLE, counted, and the run exits 2
+        if os.geteuid() != 0:  # as root every folder can be read, so there is nothing to see
+            locked = pathlib.Path(tmp) / "locked" / "Peri-implantitis"
+            (locked / "closed").mkdir(parents=True)
+            (locked / "closed" / "hidden [PMID 1001].pdf").write_bytes(same)
+            (locked / "open [PMID 1003].pdf").write_bytes(b"%PDF-1.4 readable\n")
+            (locked / "closed").chmod(0)
+            try:
+                pf = import_test_module(pathlib.Path(tmp) / "papers-locked")
+                pf.doi_in_pdf = lambda pdf: ""
+                args_locked = types.SimpleNamespace(**{**vars(args), "files": [str(locked.parent)], "dry_run": True})
+                code, text = printed(pf.cmd_import, args_locked)
+            finally:
+                (locked / "closed").chmod(0o755)
+            if code != 2 or "UNREADABLE  " + str(locked / "closed") not in text \
+                    or not text.strip().endswith("| UNREADABLE 1"):
+                fail(f"an unreadable folder must be reported, counted and make the run exit 2, got {code}: {text}")
+
+        # A copy that fails is ERROR, and the next copy of the same paper is still imported
+        failing = pathlib.Path(tmp) / "papers-failing"
+        second = pathlib.Path(tmp) / "second" / "Peri-implantitis"
+        second.mkdir(parents=True)
+        (second / "a [PMID 1001].pdf").write_bytes(same)
+        (second / "b [PMID 1001].pdf").write_bytes(same)
+        pf = import_test_module(failing)
+        real_copy, calls = pf.shutil.copyfile, []
+
+        def copy_once_failing(src: str, dst: str) -> None:
+            calls.append(src)
+            if len(calls) == 1:
+                raise OSError(28, "No space left on device")
+            real_copy(src, dst)
+        pf.shutil.copyfile = copy_once_failing
+        args_second = types.SimpleNamespace(**{**vars(args), "files": [str(second)]})
+        code, text = printed(pf.cmd_import, args_second)
+        if text.strip().splitlines()[-1] != "IMPORTED 1 | EXISTS 0 | DUPLICATE_BYTES 0 | NO_MATCH 0 | NO_DOI 0 | ERROR 1":
+            fail(f"a failed copy must be ERROR and must not make the next copy a duplicate, got: {text}")
+        if "ERROR  " + str(second / "a [PMID 1001].pdf") not in text or "No space left" not in text:
+            fail(f"the ERROR line must name the file and the fault, got: {text}")
+
+        # A copy that stops half way leaves no truncated PDF under the paper's name and no
+        # .part file, and the next copy of the same paper is imported
+        halfway = pathlib.Path(tmp) / "papers-halfway"
+        pf = import_test_module(halfway)
+        real_copy, targets = pf.shutil.copyfile, []
+
+        def copy_once_halfway(src: str, dst: str) -> None:
+            targets.append(dst)
+            if len(targets) == 1:
+                pathlib.Path(dst).write_bytes(same[:10])
+                raise OSError(28, "No space left on device")
+            real_copy(src, dst)
+        pf.shutil.copyfile = copy_once_halfway
+        code, text = printed(pf.cmd_import, args_second)
+        left = sorted(f.name for f in (halfway / "Peri-implantitis").iterdir() if f.suffix != ".bib")
+        if text.strip().splitlines()[-1] != "IMPORTED 1 | EXISTS 0 | DUPLICATE_BYTES 0 | NO_MATCH 0 | NO_DOI 0 | ERROR 1" \
+                or left != [saved[1]] or (halfway / "Peri-implantitis" / saved[1]).read_bytes() != same:
+            fail(f"a copy that stops half way must leave no truncated PDF and no .part file, got {left!r}: {text}")
+        if not all(t.endswith(".pdf.part") for t in targets) \
+                or [r["file"] for r in pf.index_rows()] != ["Peri-implantitis/" + saved[1]]:
+            fail(f"a copy must go to a .part name first, and only the whole copy is indexed, got {targets!r}")
+
+        # get writes through the same guard
+        target = halfway / "Peri-implantitis" / "download [PMID 1002].pdf"
+
+        def write_halfway(part: pathlib.Path) -> None:
+            part.write_bytes(b"%PDF-1.4 half")
+            raise OSError(28, "No space left on device")
+        try:
+            pf.into_place(target, write_halfway)
+        except OSError:
+            pass
+        else:
+            fail("into_place must raise the fault again")
+        if target.exists() or target.with_name(target.name + ".part").exists():
+            fail("a write that stops half way must leave no file under the paper's name and no .part file")
+        pf.into_place(target, lambda part: part.write_bytes(b"%PDF-1.4 whole"))
+        if target.read_bytes() != b"%PDF-1.4 whole" or target.with_name(target.name + ".part").exists():
+            fail("a whole write must land under the paper's name with no .part file left")
+        if (ROOT / PAPER_FETCH).read_text(encoding="utf-8").count("into_place(path, lambda part: ") != 2:
+            fail("get and import must both write the PDF through into_place")
+
+    help_text = run([sys.executable, PAPER_FETCH, "import", "--help"]).stdout
+    for flag in ("--topic-from-parent", "--dry-run"):
+        if flag not in help_text:
+            fail(f"paper_fetch.py import --help does not list {flag}")
+    if "TITLE_MATCH = 0.85" not in (ROOT / PAPER_FETCH).read_text(encoding="utf-8"):
+        fail("a title found by a file name must need a similarity above 0.85")
+
+
+def test_paper_fetch_title_guard() -> None:
+    """A paper found by the title in a file name is taken only when the numbers in the title,
+    the year and the first author agree with the name and it is not a comment or correction:
+    a sibling record (Part II for Part I, 10-year for 5-year, "Comment on") is refused."""
+    with tempfile.TemporaryDirectory() as tmp:
+        source = pathlib.Path(tmp) / "source" / "Bone levels"
+        source.mkdir(parents=True)
+        long_title = "Invented long report on marginal bone level changes around implants in the posterior maxilla"
+        names = ["2020 - Example - Invented follow-up study Part I.pdf",
+                 "2020 - Example - Invented outcomes after 5 years of loading.pdf",
+                 f"2020 - Example - {long_title}.pdf",
+                 "2015 - Example - Invented sound paper about bone levels.pdf",
+                 "2020 - Other - Invented sound paper about bone levels.pdf",
+                 "2020 - Example T - Invented sound paper about bone levels.pdf",
+                 "2021 - Example - Invented crossref only paper.pdf",
+                 # round 2 of the review
+                 "2021 - Example - Comment on: Invented reply target paper with a fairly long title about implants.pdf",
+                 f"2021 - Example - Comment on: {long_title}.pdf",
+                 "Invented consensus report on peri-implant diseases.pdf",
+                 "Invented single plain title paper.pdf",
+                 "Example et al. - 2020 - Invented zotero style paper.pdf",
+                 "2020 - Example - Invented five-year results of something.pdf",
+                 "2020 - Lindhe and Example - Invented sound paper about bone levels.pdf",
+                 "2020 - Example, Lindhe - Invented sound paper about bone levels.pdf",
+                 # round 3 of the review
+                 "Example et al. - 2018 - Invented consensus report on peri-implant diseases.pdf",
+                 "2020 - Example - Invented classic paper on bone.pdf",
+                 "2020 - Example - Invented short implants v long implants.pdf",
+                 # round 4 of the review: a Crossref sibling or comment cannot lend its DOI
+                 "2020 - Example - Invented no-doi part study Part I.pdf",
+                 "2020 - Example - Invented no-doi comment target study on marginal bone.pdf"]
+        for n, name in enumerate(names):
+            (source / name).write_bytes(f"%PDF-1.4 invented file {n}\n".encode())
+        before = sorted(f.name for f in source.iterdir())
+        crossref = {"message": {"items": [{"DOI": "10.1234/CR.2105", "title": ["Invented crossref only paper"],
+                                           "issued": {"date-parts": [[2021, 3]]}, "author": [{"family": "Example", "given": "A"}],
+                                           "container-title": ["Invented J"]}]}}
+        openalex = {"ids": {}, "title": "Invented crossref only paper", "publication_year": 2021,
+                    "authorships": [{"author": {"display_name": "A Example"}}],
+                    "primary_location": {"source": {"display_name": "Invented J"}}, "open_access": {"oa_status": "green"}}
+        twins = json.dumps({"result": {"uids": ["2107", "2108"], **{
+            pmid: {"uid": pmid, "title": "Invented consensus report on peri-implant diseases.", "source": journal,
+                   "pubdate": "2018 Jun", "authors": [{"name": "Example A"}],
+                   "articleids": [{"idtype": "pubmed", "value": pmid}]}
+            for pmid, journal in (("2107", "Invented J"), ("2108", "Other Invented J"))}}}).encode()
+        classic = {"message": {"items": [{"DOI": "10.1234/classic.2112", "title": ["Invented classic paper on bone"],
+                                          "issued": {"date-parts": [[2020]]}, "author": [{"family": "Example"}],
+                                          "container-title": ["Invented J"]}]}}
+        def crossref_one(doi: str, title: str) -> bytes:
+            return json.dumps({"message": {"items": [{"DOI": doi, "title": [title], "issued": {"date-parts": [[2020]]},
+                                                      "author": [{"family": "Example"}], "container-title": ["Invented J"]}]}}).encode()
+        papers = pathlib.Path(tmp) / "papers"
+        pf = load_paper_fetch(papers, [
+            ("Invented+no-doi+part+study+Part+I%5Bti%5D", pubmed_found("2114")),
+            ("id=2114", pubmed_summary("2114", "Invented no-doi part study Part I")),
+            ("query.bibliographic=Invented+no-doi+part+study+Part+I", crossref_one("10.1234/part.2", "Invented no-doi part study Part II")),
+            ("Invented+no-doi+comment+target+study+on+marginal+bone%5Bti%5D", pubmed_found("2115")),
+            ("id=2115", pubmed_summary("2115", "Invented no-doi comment target study on marginal bone")),
+            ("query.bibliographic=Invented+no-doi+comment+target+study+on+marginal+bone",
+             crossref_one("10.1234/comment.2115", "Comment on: Invented no-doi comment target study on marginal bone")),
+            ("Invented+classic+paper+on+bone%5Bti%5D", pubmed_found("2112")),
+            ("id=2112", pubmed_summary("2112", "Invented classic paper on bone")),
+            ("query.bibliographic=Invented+classic+paper+on+bone", json.dumps(classic).encode()),
+            ("Invented+short+implants", pubmed_found("2113")),
+            ("id=2113", pubmed_summary("2113", "Invented short implants versus long implants")),
+            ("Invented+reply+target", pubmed_found("2106")),
+            ("id=2106", pubmed_summary("2106", "Invented reply target paper with a fairly long title about implants")),
+            ("Invented+consensus+report+on+peri-implant+diseases%5Bti%5D", pubmed_found("2107", "2108")),
+            ("id=2107%2C2108", twins),
+            ("Invented+single+plain+title", pubmed_found("2109")),
+            ("id=2109", pubmed_summary("2109", "Invented single plain title paper")),
+            ("Invented+zotero+style", pubmed_found("2110")),
+            ("id=2110", pubmed_summary("2110", "Invented zotero style paper")),
+            ("Invented+five-year+results", pubmed_found("2111")),
+            ("id=2111", pubmed_summary("2111", "Invented 5-year results of something")),
+            ("Part+I%5Bti%5D", pubmed_found("2101")),
+            ("id=2101", pubmed_summary("2101", "Invented follow-up study Part II")),
+            ("after+5+years", pubmed_found("2102")),
+            ("id=2102", pubmed_summary("2102", "Invented outcomes after 10 years of loading")),
+            ("Invented+long+report", pubmed_found("2103")),
+            ("id=2103", pubmed_summary("2103", "Comment on: " + long_title)),
+            ("Invented+sound+paper", pubmed_found("2104")),
+            ("id=2104", pubmed_summary("2104", "Invented sound paper about bone levels")),
+            ("Invented+crossref+only+paper%5Bti%5D", pubmed_found()),
+            ("cr.2105%5Bdoi%5D", pubmed_found()),
+            ("query.bibliographic=Invented+crossref+only+paper", json.dumps(crossref).encode()),
+            ("works/doi:10.1234/cr.2105", json.dumps(openalex).encode()),
+            ("api.crossref.org", b'{"message": {"items": []}}'),
+        ])
+        pf.doi_in_pdf = lambda pdf: ""
+        pf.shutil = types.SimpleNamespace(which=lambda tool, path=None: "/usr/bin/pdftotext" if tool == "pdftotext" else None,
+                                          copyfile=__import__("shutil").copyfile, copy2=tools_found().copy2,
+                                          move=tools_found().move)
+        args = types.SimpleNamespace(files=[str(source.parent)], topic=None, topic_from_parent=True, days=1,
+                                     move=False, yes=False, dry_run=False, no_figures=True)
+        code, text = printed(pf.cmd_import, args)
+        expected = "IMPORTED 10 | EXISTS 1 | DUPLICATE_BYTES 0 | NO_MATCH 9 | NO_DOI 0"
+        if code != 2 or text.strip().splitlines()[-1] != expected:
+            fail(f"title guard: expected exit 2 and {expected!r}, got {code}: {text}")
+        for reason in ("the numbers differ: 1 in the name, 2 in its title",
+                       "the numbers differ: 5 in the name, 10 in its title",
+                       "it is a comment, reply, letter or correction about a paper, not the paper",
+                       "the name is a comment, reply, letter or correction about a paper, and this is the paper itself",
+                       "the year 2015 in the name is not within a year of 2020",
+                       "the first author Other in the name is not Example",
+                       "the first author Lindhe and Example in the name is not Example",
+                       '2 papers pass for this name: PMID 2107 "Invented consensus report on peri-implant diseases" '
+                       '(Invented J 2018); PMID 2108 "Invented consensus report on peri-implant diseases" (Other Invented J '
+                       "2018); add a [PMID n] or [DOI ...] tag to the name to say which one"):
+            if reason not in text:
+                fail(f"a refused sibling record must say why: {reason!r} missing in: {text}")
+        if text.count("2 papers pass for this name") != 2:
+            fail("the twin-journal refusal must fire for the plain-title name AND for the Zotero name with year and author")
+        saved = sorted(f.name for f in (papers / "Bone levels").iterdir() if f.suffix == ".pdf")
+        if saved != ["2020 Example - Comment on Invented long report on marginal bone level changes around implants i - Invented J [PMID 2103].pdf",
+                     "2020 Example - Invented 5-year results of something - Invented J [PMID 2111].pdf",
+                     "2020 Example - Invented classic paper on bone - Invented J [PMID 2112].pdf",
+                     "2020 Example - Invented no-doi comment target study on marginal bone - Invented J [PMID 2115].pdf",
+                     "2020 Example - Invented no-doi part study Part I - Invented J [PMID 2114].pdf",
+                     "2020 Example - Invented short implants versus long implants - Invented J [PMID 2113].pdf",
+                     "2020 Example - Invented single plain title paper - Invented J [PMID 2109].pdf",
+                     "2020 Example - Invented sound paper about bone levels - Invented J [PMID 2104].pdf",
+                     "2020 Example - Invented zotero style paper - Invented J [PMID 2110].pdf",
+                     "2021 Example - Invented crossref only paper - Invented J [DOI 10.1234_cr.2105].pdf"]:
+            fail(f"unexpected set of imported files: {saved!r}")
+        if "EXISTS  " not in text or "(left 2020 - Example, Lindhe - Invented sound paper about bone levels.pdf" not in text:
+            fail(f"a name whose first surname agrees must reach the EXISTS check, got: {text}")
+        row = next(r for r in pf.index_rows() if r["pmid"] == "2112")
+        if row["doi"] != "10.1234/classic.2112":
+            fail(f"a PubMed paper without a DOI must take the DOI of its Crossref twin, got {row!r}")
+        dois = {r["pmid"]: r["doi"] for r in pf.index_rows() if r["pmid"] in ("2114", "2115")}
+        if dois != {"2114": "", "2115": ""}:
+            fail(f"a Crossref Part II or comment record must not lend its DOI to a PubMed record without one, got {dois!r}")
+        if sorted(f.name for f in source.iterdir()) != before:
+            fail("the title guard must never delete or move a source file")
+        if not any("retmax=3" in c for c in pf.http_get.calls) or not any("rows=3" in c for c in pf.http_get.calls):
+            fail("the title fallback must ask PubMed and Crossref for three candidates each")
+        if pf.name_parts("2020 - Example - A title [PMID 5]") != ("2020", "Example", "A title") \
+                or pf.name_parts("2020 Example - A title") != ("2020", "Example", "A title") \
+                or pf.name_parts("Example et al. - 2020 - A title") != ("2020", "Example et al.", "A title") \
+                or pf.name_parts("Just a title") != ("", "", "Just a title"):
+            fail("name_parts must read year, author and title from a file name, Zotero's order included")
+        if not pf.same_author("Berglundh T", "Berglundh") or not pf.same_author("M\u00fcller et al", "Muller") \
+                or not pf.same_author("Berglundh, Lindhe", "Berglundh") or pf.same_author("Lindhe and Berglundh", "Berglundh") \
+                or pf.same_author("Other", "Example") or pf.same_author("", "Example"):
+            fail("same_author must compare the first surname only, without case, accents or initials")
+        if pf.title_numbers("Outcomes after 10 years, Part II") != [2, 10] or pf.title_numbers("five-year Part V") != [5, 5] \
+                or pf.title_numbers("Part IV and part 4") != [4, 4] or pf.title_numbers("short implants v long implants") != [] \
+                or pf.title_numbers("Stage III periodontitis, grade C") != [3]:
+            fail("title_numbers must read digits, number words, and roman numerals only after Part, Stage and the like")
+
+
+def test_paper_fetch_library_commands() -> None:
+    """library rebuild-index writes one row per PDF on disk, keeping known rows without a
+    lookup and resolving unknown tags once; library stats counts topics, untagged files
+    and groups of files with the same bytes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        papers = pathlib.Path(tmp) / "papers"
+        a, b = papers / "Topic A", papers / "Topic B"
+        a.mkdir(parents=True)
+        b.mkdir()
+        same = b"%PDF-1.4 the same bytes\n"
+        known = a / "2020 Example - Invented test paper on bone levels - Invented J [PMID 1001].pdf"
+        known.write_bytes(same)
+        (a / "old name [PMID 1003].pdf").write_bytes(b"%PDF-1.4 scan\n")
+        (a / "[DOI 10.1234_invented.1005].pdf").write_bytes(b"%PDF-1.4 by doi\n")
+        (b / "[PMID 4040].pdf").write_bytes(b"%PDF-1.4 unknown pmid\n")
+        (b / "copy [PMID 1001].pdf").write_bytes(same)
+        (b / "no tag here.pdf").write_bytes(b"%PDF-1.4 no tag\n")
+        (b / "[DOI 10.1234_invented_2020_123].pdf").write_bytes(b"%PDF-1.4 brackets in the doi\n")
+        (b / "[DOI 10.9999_nothing].pdf").write_bytes(b"%PDF-1.4 doi that resolves nowhere\n")
+        pf = load_paper_fetch(papers, [
+            ("id=1003", pubmed_summary("1003", "Invented scan with a DOI inside", "10.1234/invented.1003")),
+            ("id=1005", pubmed_summary("1005", "Invented paper found by its DOI tag", "10.1234/invented.1005")),
+            ("id=1006", pubmed_summary("1006", "Invented paper with brackets in its DOI", "10.1234/invented(2020)123")),
+            ("invented.1005%5Bdoi%5D", pubmed_found("1005")),
+            ("invented%282020%29123%5Bdoi%5D", pubmed_found("1006")),
+            ("invented_2020_123%5Bdoi%5D", pubmed_found()),
+            ("nothing%5Bdoi%5D", pubmed_found()),
+            ("id=4040", json.dumps({"result": {"uids": ["4040"], "4040": {"uid": "4040", "error": "no such record"}}}).encode()),
+        ])
+        pf.doi_in_pdf = lambda pdf: "10.1234/invented(2020)123" if "2020_123" in pdf.name else ""
+        pf.write_index([{"saved_at": "2026-01-01T00:00:00", "topic": "Topic A", "pmid": "1001",
+                         "doi": "10.1234/invented.1001", "title": "Invented test paper on bone levels",
+                         "file": "Topic A/" + known.name, "sha256": pf.sha256_of(known), "license": "CC BY"},
+                        {"saved_at": "2026-01-01T00:00:00", "topic": "Topic A", "pmid": "1999",
+                         "file": "Topic A/gone [PMID 1999].pdf"}])
+        code, text = printed(pf.rebuild_index)
+        rows = pf.index_rows()
+        expected = [("Topic A/" + known.name, "1001"), ("Topic A/[DOI 10.1234_invented.1005].pdf", "1005"),
+                    ("Topic A/old name [PMID 1003].pdf", "1003"),
+                    ("Topic B/[DOI 10.1234_invented_2020_123].pdf", "1006"), ("Topic B/[DOI 10.9999_nothing].pdf", ""),
+                    ("Topic B/[PMID 4040].pdf", "4040"), ("Topic B/copy [PMID 1001].pdf", "1001")]
+        if code != 0 or [(r["file"], r["pmid"]) for r in rows] != expected:
+            fail(f"rebuild-index rows: expected {expected!r}, got {[(r['file'], r['pmid']) for r in rows]!r}: {text}")
+        if rows[0]["license"] != "CC BY" or rows[6]["license"] != "CC BY" or rows[6]["title"] != rows[0]["title"]:
+            fail("a known row must be kept, also for a second file with the same bytes")
+        if rows[1]["doi"] != "10.1234/invented.1005" or rows[2]["title"] != "Invented scan with a DOI inside":
+            fail(f"unknown tags must be resolved, got {rows[1]!r} {rows[2]!r}")
+        if rows[3]["doi"] != "10.1234/invented(2020)123":
+            fail(f"a DOI tag that cannot be read back must fall back to the DOI inside the PDF, got {rows[3]!r}")
+        if rows[4]["doi"] or rows[4]["title"] or rows[4]["source"] != "on disk":
+            fail(f"a DOI read from a name that resolves nowhere must not be stored, got {rows[4]!r}")
+        if rows[5]["title"] or rows[5]["source"] != "on disk" or rows[5]["oa_status"] != "unknown":
+            fail(f"a PMID tag that matches no paper keeps a row with the PMID and file only, got {rows[5]!r}")
+        if any(len(r["sha256"]) != 64 for r in rows):
+            fail("every row must carry the file's sha256")
+        if any("id=1001" in call for call in pf.http_get.calls):
+            fail("a row the index already holds must cost no lookup")
+        last = text.strip().splitlines()[-1]
+        if "kept 2 | added 3 | no metadata 2 | dropped 1 | files without a tag 1" not in last or "NO_TAG  Topic B/no tag here.pdf" not in text:
+            fail(f"rebuild-index must report kept, added, no metadata, dropped and untagged, got: {text}")
+
+        # The next rebuild resolves placeholder rows again: the DOI is known now, the PMID still is not
+        answers = list(pf.http_get.answers) + [
+            ("id=1007", pubmed_summary("1007", "Invented paper that resolves on the second try", "10.9999/nothing")),
+            ("nothing%5Bdoi%5D", pubmed_found("1007"))]
+        pf.http_get = FakeNetwork([a for a in answers if a[0] != "nothing%5Bdoi%5D" or a[1] != pubmed_found()])
+        code, text = printed(pf.rebuild_index)
+        rows = pf.index_rows()
+        if code != 0 or rows[4]["title"] != "Invented paper that resolves on the second try" or rows[4]["doi"] != "10.9999/nothing":
+            fail(f"a placeholder row must be resolved again on the next rebuild, got {rows[4]!r}: {text}")
+        if rows[5]["title"] or "kept 5 | added 1 | no metadata 1 | dropped 0" not in text.strip().splitlines()[-1]:
+            fail(f"a placeholder that still resolves nowhere stays one, and full rows are kept, got: {text}")
+
+        code, text = printed(pf.library_stats)
+        lines = text.splitlines()
+        if code != 0 or lines[1].split() != ["3", "Topic", "A"] or lines[2].split() != ["5", "Topic", "B"]:
+            fail(f"stats must count PDFs per topic, got: {text}")
+        if "PAPERS  8 PDF files in 2 topic folders | 7 index rows" not in text:
+            fail(f"stats must count files and index rows, got: {text}")
+        if "NO_TAG  1 file(s)" not in text or "Topic B/no tag here.pdf" not in text:
+            fail(f"stats must list files without a tag, got: {text}")
+        if "DUPLICATE_BYTES  1 group(s)" not in text or "Topic B/copy [PMID 1001].pdf" not in text:
+            fail(f"stats must list groups of files with the same bytes, got: {text}")
+    help_text = run([sys.executable, PAPER_FETCH, "library", "--help"]).stdout
+    if "rebuild-index" not in help_text or "stats" not in help_text:
+        fail("paper_fetch.py library --help must list rebuild-index and stats")
 
 
 def test_paper_fetch_sources_and_safety() -> None:
@@ -851,6 +1435,12 @@ TESTS = [
     test_paper_fetch_pmid_without_doi,
     test_paper_fetch_certificate_retry,
     test_paper_fetch_import_needs_yes,
+    test_paper_fetch_mount_guard,
+    test_paper_fetch_file_names,
+    test_paper_fetch_index_columns,
+    test_paper_fetch_import_folder,
+    test_paper_fetch_title_guard,
+    test_paper_fetch_library_commands,
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
     test_fixtures,

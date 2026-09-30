@@ -23,12 +23,17 @@ same link is tried once with the system curl, also with checking on.
 For a paper that did not download it prints ResearchGate and Academia.edu search links and
 points to the PubMed record for the corresponding author's address. With --emails it prints
 the author email addresses found in the PubMed record. Those addresses are for a full-text
-request only. `import` files PDFs downloaded by hand (library, ResearchGate, an author) by
-reading the DOI printed inside them.
+request only. `import` files PDFs downloaded by hand (library, ResearchGate, an author),
+one file or a whole folder, by the [PMID n] tag in the file name, else the DOI printed
+inside the PDF, else the title in the file name when a paper matches it closely. A file
+that matches nothing is listed and left where it is: the tool never guesses and never
+deletes a source file.
 
 Environment variables, all optional:
   PAPERS_DIR         folder for everything the tool saves; default: ./papers under the
-                     current directory
+                     current directory. On an external drive (/Volumes/<name>/...), every
+                     command that touches the folder first checks that the drive is
+                     connected, so nothing is ever written to a plain folder under /Volumes
   CORE_API_KEY       API key for core.ac.uk; without it CORE is skipped
   PAPER_FETCH_EMAIL  contact address sent to PubMed (E-utilities "email" parameter) and to
                      OpenAlex and Crossref ("mailto" parameter); sent to no other service
@@ -36,10 +41,12 @@ Environment variables, all optional:
 Every request identifies itself with one User-Agent: dental-paper-fetch/1.0 plus the
 repository link.
 
-Files go to "<PAPERS_DIR>/<Topic>/": the PDF, its BibTeX entry in references.bib, and its
-figures in figures/<PMID n>/ with a figures.json that records each figure's label, caption,
-page, the paper's license and whether an image model may use it. The catalog of all papers
-is <PAPERS_DIR>/_index.csv.
+Files go to "<PAPERS_DIR>/<Topic>/": the PDF, named "<year> <first author> - <title> -
+<journal> [PMID n].pdf", its BibTeX entry in references.bib, and its figures in
+figures/<PMID n>/ with a figures.json that records each figure's label, caption, page, the
+paper's license and whether an image model may use it. The catalog of all papers is
+<PAPERS_DIR>/_index.csv, one row per file with its sha256 and its open-access status from
+OpenAlex (gold, hybrid, green, bronze, diamond, closed, or unknown when no record was read).
 
 Result lines: SAVED, EXISTS, OPEN_MANUALLY (free, but the script could not download it: a
 person must open the link), NO_FREE_COPY (no free legal copy found) or NOT_FOUND.
@@ -53,12 +60,17 @@ Usage:
   paper_fetch.py search "peri-implantitis surgical" --min-year 2018 --sort cites --max 10 --free
   paper_fetch.py search "peri-implantitis surgical" --max 5 --download --topic "Peri-implantitis"
   paper_fetch.py import ~/Downloads/jcpe12345.pdf --topic "Peri-implantitis"
+  paper_fetch.py import ~/Papers --topic-from-parent            # every PDF under ~/Papers, topic = its folder
+  paper_fetch.py import ~/Papers --topic-from-parent --dry-run  # says what would happen, copies nothing
   paper_fetch.py import --topic "Peri-implantitis"          # lists PDFs in ~/Downloads from the last day
   paper_fetch.py import --topic "Peri-implantitis" --yes    # imports the PDFs on that list
   paper_fetch.py topics
+  paper_fetch.py library rebuild-index    # writes _index.csv from the files on disk
+  paper_fetch.py library stats            # papers per topic, files without a tag, duplicate files
 
 Exit codes: 0 all saved or already there, 2 at least one paper not saved (normal, most
-papers are paywalled) or `import` listed files and copied nothing, 1 error.
+papers are paywalled) or `import` listed files and copied nothing or skipped a file that
+matched no paper, 1 error.
 Needs Python 3.10 or newer and only the standard library. Figures from PDFs outside PubMed
 Central need poppler (pdfimages, pdftoppm, pdftotext); without it those papers get no figures
 and the tool prints once how to install it.
@@ -69,6 +81,7 @@ import collections
 import csv
 import difflib
 import functools
+import hashlib
 import html
 import http.client
 import json
@@ -80,6 +93,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -90,7 +104,7 @@ from pathlib import Path
 # Everything is saved under PAPERS_DIR; without it, under ./papers in the current directory
 ROOT = Path(os.environ.get("PAPERS_DIR") or "papers").expanduser().absolute()
 INDEX_FIELDS = ["saved_at", "topic", "pmid", "pmcid", "doi", "year", "first_author",
-                "journal", "title", "license", "source", "file"]
+                "journal", "title", "license", "source", "file", "sha256", "oa_status"]
 # One honest identity for every request: APIs, repositories and publisher sites alike
 USER_AGENT = "dental-paper-fetch/1.0 (+https://github.com/Tuminha/dental-ai-skills)"
 # Optional contact address, sent to PubMed (email), OpenAlex and Crossref (mailto) only
@@ -273,14 +287,32 @@ def resolve_doi(doi):
     return paper_from_openalex(w, doi) if w else None
 
 
-def crossref_doi(title):
+def crossref_records(title, n=3):
+    """Up to n Crossref records whose title is close to the one given, as papers without a
+    PMID (doi, title, journal, year, first author). [] when Crossref has nothing, answers
+    with something else, or is unreachable."""
     try:
         r = get_json(with_mailto("https://api.crossref.org/works?" + urllib.parse.urlencode(
-            {"query.bibliographic": title, "rows": 1, "select": "DOI"})))
+            {"query.bibliographic": title, "rows": n, "select": "DOI,title,issued,author,container-title"})))
         items = r["message"]["items"]
-        return items[0]["DOI"].lower() if items else ""
-    except NET_ERRORS + (KeyError,):
-        return ""
+    except NET_ERRORS + (KeyError, TypeError):
+        return []
+    records = []
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict) or not it.get("DOI") or not it.get("title"):
+            continue
+        issued = ((it.get("issued") or {}).get("date-parts") or [[]])[0] or []
+        authors = it.get("author") or []
+        records.append({"pmid": "", "pmcid": "", "doi": str(it["DOI"]).lower(),
+                        "title": clean_text(it["title"][0]).rstrip("."),
+                        "journal": (it.get("container-title") or [""])[0],
+                        "year": str(issued[0]) if issued and issued[0] else "",
+                        "first_author": (authors[0].get("family") or "") if authors else ""})
+    return records
+
+
+def crossref_doi(title):
+    return (crossref_records(title, 1) or [{"doi": ""}])[0]["doi"]
 
 
 def resolve(ident):
@@ -296,7 +328,16 @@ def resolve(ident):
         return doi_from_openalex(papers[0] if papers and papers[0]["pmcid"] == s.upper() else None), ""
     if doi_match:
         return resolve_doi(doi_match.group(0).rstrip(".").lower()), ""
-    # A title: PubMed first, Crossref for papers outside PubMed; keep the closer match
+    best, score = resolve_title(s)
+    if not best:
+        return None, ""
+    return best, "" if score > 0.8 else f'CHECK  title search matched "{best["title"]}"'
+
+
+def resolve_title(s):
+    """(paper, score) for the closest title in PubMed, or in Crossref for papers outside
+    PubMed; the score is the similarity between s and that title. (None, 0.0) when nothing
+    matches."""
     candidates = pubmed_papers(pubmed_search(f"{s}[ti]", 1)[0])
     doi = crossref_doi(s)
     if doi and not any(p["doi"] == doi for p in candidates):
@@ -304,10 +345,9 @@ def resolve(ident):
         if found:
             candidates.append(found)
     if not candidates:
-        return None, ""
+        return None, 0.0
     best = max(candidates, key=lambda p: similarity(s, p["title"]))
-    note = "" if similarity(s, best["title"]) > 0.8 else f'CHECK  title search matched "{best["title"]}"'
-    return doi_from_openalex(best), note
+    return doi_from_openalex(best), similarity(s, best["title"])
 
 
 # ---------- finding a free legal PDF ----------
@@ -742,6 +782,21 @@ def report_figures(paper, pdf):
 
 # ---------- storage ----------
 
+def volume_of(path):
+    """'/Volumes/<name>' for a path on an external drive, else None."""
+    parts = Path(path).parts
+    return Path(*parts[:3]) if len(parts) >= 3 and parts[:2] == ("/", "Volumes") else None
+
+
+def require_drive():
+    """Stop when PAPERS_DIR names an external drive that is not connected. Without this
+    check the first write would create a plain folder under /Volumes on the computer's own
+    disk, and the library would be split in two without anyone noticing."""
+    volume = volume_of(ROOT)
+    if volume and not os.path.ismount(volume):
+        sys.exit(f"The drive {volume.name} is not connected. Connect it or set PAPERS_DIR.")
+
+
 def topic_dir(topic):
     name = safe_name(topic)
     if not name:
@@ -761,13 +816,33 @@ def make_folder(folder):
         print(f"Created the papers folder: {ROOT}  (set PAPERS_DIR to use another one)")
 
 
+def into_place(path, put):
+    """Call put(part) with a temporary name next to path, then move the file into place
+    under its final name. A copy or download that stops half way (disk full, the drive
+    unplugged, Ctrl-C) leaves no truncated PDF under a paper's name: the part file is
+    removed and the fault is raised again. The name ends in .part, so no listing of the
+    library takes it for a PDF. A complete part file whose final rename fails is kept."""
+    part = path.with_name(path.name + ".part")
+    try:
+        put(part)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    os.replace(part, path)
+
+
 def file_tag(paper):
     return f"PMID {paper['pmid']}" if paper["pmid"] else "DOI " + re.sub(r"[^\w.-]+", "_", paper["doi"])
 
 
 def pdf_name(paper):
-    title = safe_name(paper["title"])[:90].rstrip(" .,-")
-    return f"{paper['year'] or 'n.d.'} {safe_name(paper['first_author']) or 'Unknown'} - {title} [{file_tag(paper)}].pdf"
+    """'<year> <first author> - <title> - <journal> [PMID n].pdf', the title cut at 80
+    characters and the journal at 40. The tag stays last, so find_existing also matches
+    names saved before the journal was part of the name."""
+    head = f"{paper['year'] or 'n.d.'} {safe_name(paper['first_author']) or 'Unknown'}"
+    title = safe_name(paper["title"])[:80].rstrip(" .,-")
+    journal = safe_name(paper["journal"])[:40].rstrip(" .,-")
+    return " - ".join(part for part in (head, title, journal) if part) + f" [{file_tag(paper)}].pdf"
 
 
 def find_existing(paper):
@@ -777,39 +852,117 @@ def find_existing(paper):
     for d in ROOT.iterdir():
         if d.is_dir():
             for f in d.iterdir():
-                if tag in f.name and f.suffix.lower() == ".pdf":
+                # "._name.pdf" is Finder metadata next to a file on an exFAT drive, not a PDF
+                if tag in f.name and f.suffix.lower() == ".pdf" and not f.name.startswith("."):
                     return f
     return None
 
 
-def in_index(paper):
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def index_rows():
     index = ROOT / "_index.csv"
     if not index.exists():
-        return False
+        return []
     with open(index, newline="", encoding="utf-8") as fh:
-        return any(paper["pmid"] and r.get("pmid") == paper["pmid"]
-                   or paper["doi"] and r.get("doi") == paper["doi"] for r in csv.DictReader(fh))
+        return list(csv.DictReader(fh))
 
 
-def index_paper(paper, path, source):
-    append_index({"saved_at": datetime.now().isoformat(timespec="seconds"),
-                  "topic": path.parent.name, "file": str(path.relative_to(ROOT)),
-                  "source": source, "license": lookup_license(paper), **paper})
+def in_index(paper=None, digest=""):
+    """True when the index holds this paper's PMID or DOI, or a file with these bytes."""
+    for r in index_rows():
+        if paper and (paper["pmid"] and r.get("pmid") == paper["pmid"]
+                      or paper["doi"] and r.get("doi") == paper["doi"]):
+            return True
+        if digest and r.get("sha256") == digest:
+            return True
+    return False
+
+
+def indexed_file(digest):
+    """The library file that holds these bytes, by the index, or None when no row has this
+    sha256 or the row's file is gone (deleted by hand; rebuild-index drops such rows)."""
+    for r in index_rows():
+        if digest and r.get("sha256") == digest and r.get("file") and (ROOT / r["file"]).is_file():
+            return ROOT / r["file"]
+    return None
+
+
+def oa_status(paper):
+    """OpenAlex's open-access status (gold, hybrid, green, bronze, diamond or closed) from
+    the record read during this run, or 'unknown' when no record was read."""
+    w = OPENALEX.get(paper["doi"]) if paper["doi"] else None
+    return ((w or {}).get("open_access") or {}).get("oa_status") or "unknown"
+
+
+def index_row(paper, path, source, digest=""):
+    lic = lookup_license(paper)  # may read the OpenAlex record, which oa_status then uses
+    return {"saved_at": datetime.now().isoformat(timespec="seconds"),
+            "topic": path.parent.name, "file": str(path.relative_to(ROOT)),
+            "source": source, "license": lic, "sha256": digest or sha256_of(path),
+            "oa_status": oa_status(paper), **paper}
+
+
+def index_paper(paper, path, source, digest=""):
+    append_index(index_row(paper, path, source, digest))
+
+
+def index_header():
+    """The columns of the index on disk, [] without an index."""
+    index = ROOT / "_index.csv"
+    if not index.exists():
+        return []
+    with open(index, newline="", encoding="utf-8") as fh:
+        return csv.DictReader(fh).fieldnames or []
+
+
+def index_fields(rows=(), header=()):
+    """INDEX_FIELDS, then every other column of the index on disk and of the rows, in the
+    order first seen: a column added by hand (notes, read on) survives every rewrite."""
+    fields = list(INDEX_FIELDS)
+    for name in list(header) + [k for r in rows for k in r]:
+        if name and name not in fields:
+            fields.append(name)
+    return fields
+
+
+def write_index(rows):
+    """Write the whole index: to a temporary file next to it first, then into place, so a
+    write that fails half way (disk full, the drive unplugged) leaves the old index intact."""
+    index = ROOT / "_index.csv"
+    tmp = index.with_name("_index.csv.tmp")
+    fields = index_fields(rows, index_header())
+    try:
+        with open(tmp, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fields, restval="", extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(tmp, index)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def append_index(row):
     index = ROOT / "_index.csv"
-    old = []  # rows to rewrite: none for a new file, all of them after a column change
-    if index.exists():
-        with open(index, newline="", encoding="utf-8") as fh:
-            reader = csv.DictReader(fh)
-            old = list(reader) if reader.fieldnames != INDEX_FIELDS else None
-    with open(index, "a" if old is None else "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=INDEX_FIELDS, restval="", extrasaction="ignore")
-        if old is not None:
-            writer.writeheader()
-            writer.writerows(old)
-        writer.writerow(row)
+    if not index.exists():
+        write_index([row])
+        return
+    with open(index, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        header = reader.fieldnames or []
+        old = None if set(INDEX_FIELDS) <= set(header) else list(reader)
+    if old is not None:  # a column is missing: every row is written again under the full header
+        write_index(old + [row])
+        return
+    with open(index, "a", newline="", encoding="utf-8") as fh:  # under the header on disk, extra columns kept
+        csv.DictWriter(fh, fieldnames=header, restval="", extrasaction="ignore").writerow(row)
 
 
 def append_bibtex(paper, folder):
@@ -882,7 +1035,7 @@ def get_one(ident, topic, with_figures=True, show_emails=False):
         return ("OPEN_MANUALLY" if failed else "NO_FREE_COPY"), ""
     make_folder(folder)
     path = folder / pdf_name(paper)
-    path.write_bytes(data)
+    into_place(path, lambda part: part.write_bytes(data))
     index_paper(paper, path, url)
     append_bibtex(paper, folder)
     print(f"SAVED  {path}\n       {describe(paper)} | {len(data) // 1024} KB | {source}")
@@ -943,12 +1096,278 @@ def doi_in_pdf(pdf):
     return ""
 
 
+NAME_TAG = re.compile(r"\[(PMID|DOI) ([^\]]+)\]")
+TITLE_MATCH = 0.85  # a paper found by the title in a file name must match it this closely
+
+
+def tag_in_name(name):
+    """('pmid', '123') or ('doi', '10.1111/jcpe.12345') from the "[PMID n]" or "[DOI ...]"
+    tag in a file name, else None. file_tag() writes the "/" of a DOI as "_"; the first "_"
+    after the DOI prefix is turned back into "/"."""
+    m = NAME_TAG.search(name)
+    if not m:
+        return None
+    kind, value = m.group(1).lower(), m.group(2).strip()
+    if kind == "pmid":
+        return ("pmid", value) if value.isdigit() else None
+    return "doi", re.sub(r"^(10\.\d{4,9})_", r"\1/", value).lower()
+
+
+NAME_PARTS = [re.compile(r"^(?P<year>\d{4}|n\.d\.)\s+-?\s*(?P<author>.+?)\s+-\s+(?P<title>.+)$"),
+              re.compile(r"^(?P<author>.+?)\s+-\s+(?P<year>\d{4}|n\.d\.)\s+-\s+(?P<title>.+)$")]  # Zotero's order
+NUMBER_WORDS = {w: n for n, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve "
+                                           "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split())}
+NUMBER_WORDS.update(thirty=30, forty=40, fifty=50, sixty=60, seventy=70, eighty=80, ninety=90, hundred=100)
+ROMAN = re.compile(r"^(x{0,3})(ix|iv|v?i{0,3})$")
+# "i", "v" and "x" are roman numerals only after one of these words: "short implants v
+# long implants" means versus, "Stage III" and "Part IV" mean 3 and 4
+ROMAN_AFTER = {"part", "chapter", "class", "type", "phase", "volume", "vol", "stage", "grade"}
+# A title that starts like this is about a paper (a comment, reply, letter or correction),
+# not the paper; "Comment on", "Erratum", "Corrigendum" and "Retraction" anywhere say the same
+SIDE_NOTE = re.compile(r"(?i)^\W*(?:(?:comment|commentary|reply|response|letter|erratum|corrigendum|correction|"
+                       r"retraction|editorial)\b|re:|authors?'?s?\s+(?:reply|response)\b)"
+                       r"|\b(?:comment on|erratum|corrigendum|retraction|retracted)\b")
+
+
+def name_parts(stem):
+    """(year, first author, title) from a file name of the form "<year> - <author> - <title>",
+    "<year> <author> - <title>" or Zotero's "<author> - <year> - <title>", without any
+    [PMID n] or [DOI ...] tag. Any other name gives ("", "", <the whole name>)."""
+    stem = NAME_TAG.sub("", stem).strip(" -")
+    m = next((m for m in (pattern.match(stem) for pattern in NAME_PARTS) if m), None)
+    if not m:
+        return "", "", stem
+    year = m.group("year") if m.group("year").isdigit() else ""
+    return year, m.group("author").strip(), m.group("title").strip(" -")
+
+
+def title_in_name(stem):
+    return name_parts(stem)[2]
+
+
+def title_numbers(title):
+    """The numbers in a title, sorted, with number words and roman numerals read as numbers:
+    "5-year", "five-year" and "Part V" all give 5, so 5 and 10 tell a 5-year from a 10-year
+    follow-up and 1 and 2 tell Part I from Part II. A roman numeral counts only after Part,
+    Chapter, Class, Type, Phase, Volume, Stage or Grade. Two titles that read alike but
+    differ here belong to two papers."""
+    numbers = []
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    for before, w in zip([""] + words, words):
+        if w.isdigit():
+            numbers.append(int(w))
+        elif w in NUMBER_WORDS:
+            numbers.append(NUMBER_WORDS[w])
+        elif before in ROMAN_AFTER and ROMAN.match(w):
+            tens, units = ROMAN.match(w).groups()
+            numbers.append(10 * len(tens) + {"": 0, "i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5,
+                                             "vi": 6, "vii": 7, "viii": 8, "ix": 9}[units])
+    return sorted(numbers)
+
+
+def same_author(captured, candidate):
+    """True when the first author in a file name is the paper's first author. Only the first
+    surname of the name counts ("Lindhe and Berglundh" is Lindhe), compared without case,
+    accents or initials: "Berglundh T", "berglundh" and "Berglundh et al" all match
+    "Berglundh"; "Other" does not."""
+    plain = lambda s: "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+    words = lambda s: {w for w in re.findall(r"[a-z]+", plain(s).lower()) if len(w) > 1 and w not in ("et", "al")}
+    first = re.split(r"[,;&]|\s+(?:and|et|y|und)\s+", captured, maxsplit=1)[0]
+    got, want = words(first), words(candidate)
+    return bool(got and want) and (want <= got or got <= want)
+
+
+def disagreement(title, year, author, cand):
+    """Why a paper whose title reads like the file name is still another paper, or "" when
+    its kind, the numbers in the title, the year and the first author all agree with the
+    name. A name without a year or an author is checked on the title and its numbers."""
+    if SIDE_NOTE.search(cand["title"]) and not SIDE_NOTE.search(title):
+        return "it is a comment, reply, letter or correction about a paper, not the paper"
+    if SIDE_NOTE.search(title) and not SIDE_NOTE.search(cand["title"]):
+        return "the name is a comment, reply, letter or correction about a paper, and this is the paper itself"
+    mine, theirs = title_numbers(title), title_numbers(cand["title"])
+    if mine != theirs:
+        return (f"the numbers differ: {' '.join(map(str, mine)) or 'none'} in the name, "
+                f"{' '.join(map(str, theirs)) or 'none'} in its title")
+    if year and (not cand["year"].isdigit() or abs(int(year) - int(cand["year"])) > 1):
+        return f"the year {year} in the name is not within a year of {cand['year'] or 'its unknown year'}"
+    if author and not same_author(author, cand["first_author"]):
+        return f"the first author {author} in the name is not {cand['first_author'] or 'known for it'}"
+    return ""
+
+
+def title_candidates(title):
+    """Up to three PubMed papers and three Crossref records whose title is close to the one
+    given, PubMed first, no DOI twice. A Crossref record that is the twin of a PubMed paper
+    without a DOI (an older paper: the title above TITLE_MATCH and nothing that
+    disagreement() refuses, so the same numbers, kind, year within one and first surname)
+    gives that paper its DOI instead of standing beside it as a second candidate. A Part
+    II or a comment record cannot lend its DOI."""
+    candidates = pubmed_papers(pubmed_search(f"{title}[ti]", 3)[0])
+    for r in crossref_records(title):
+        if any(p["doi"] == r["doi"] for p in candidates):
+            continue
+        twin = next((p for p in candidates if not p["doi"] and similarity(p["title"], r["title"]) > TITLE_MATCH
+                     and not disagreement(p["title"], p["year"], p["first_author"], r)), None)
+        if twin:
+            twin["doi"] = r["doi"]
+        else:
+            candidates.append(r)
+    return candidates
+
+
+def match_title(title, year="", author=""):
+    """(paper, "") for the one candidate that reads like the file name above TITLE_MATCH AND
+    agrees with it on its kind, the numbers in the title, the year and the first author.
+    The paper is taken only when exactly one candidate passes: two papers that both pass
+    (a consensus report printed in two journals, with the same title, year and first
+    author) are NO_MATCH, every one named, and the file needs a tag. (None, note) names
+    the closest candidate and why it was not taken; (None, "") when nothing was found at
+    all. A Crossref record is looked up in PubMed and OpenAlex when chosen, so it carries
+    a PMID and PMCID when it has them."""
+    passing, closest, closest_score, refused = [], None, 0.0, ""
+    for cand in title_candidates(title):
+        score = similarity(title, cand["title"])
+        if score > closest_score:
+            closest, closest_score = cand, score
+        if score <= TITLE_MATCH:
+            continue
+        why = disagreement(title, year, author, cand)
+        if why:
+            refused = refused or f'closest title found: "{cand["title"]}" ({score:.2f} of 1.00) but {why}'
+            continue
+        passing.append((score, cand))
+    if len(passing) > 1:
+        names = "; ".join(f'{"PMID " + c["pmid"] if c["pmid"] else "DOI " + c["doi"]} "{c["title"]}" '
+                          f'({c["journal"] or "journal unknown"} {c["year"] or "year unknown"})' for _, c in passing)
+        return None, (f"{len(passing)} papers pass for this name: {names}; add a [PMID n] or [DOI ...] tag "
+                      f"to the name to say which one")
+    best = passing[0][1] if passing else None
+    if best:
+        if not best["pmid"]:
+            best = resolve_doi(best["doi"]) or best
+        return doi_from_openalex(best), ""
+    if refused:
+        return None, refused
+    if closest:
+        return None, (f'closest title found: "{closest["title"]}" '
+                      f"({closest_score:.2f} of 1.00; more than {TITLE_MATCH} is needed)")
+    return None, ""
+
+
+def pdf_files(paths, problems=None):
+    """The PDFs named on the command line. A folder gives every PDF under it, subfolders
+    included, folder by folder in name order. Names that start with a dot (Finder metadata
+    on external drives) are skipped. A folder that cannot be read is added to problems, as
+    (folder, reason), so the run can say what it did not see."""
+    files = []
+    note = lambda error: problems is not None and problems.append((Path(error.filename), error.strerror))
+    # "." and ".." must give real folder names, so paths are made absolute and normalized
+    for path in (Path(os.path.normpath(Path(p).expanduser().absolute())) for p in paths):
+        if path.is_dir():
+            for folder, subfolders, names in os.walk(path, onerror=note):
+                subfolders.sort()
+                files += sorted(Path(folder) / n for n in names
+                                if n.lower().endswith(".pdf") and not n.startswith("."))
+        else:
+            files.append(path)
+    return files
+
+
+def identify(pdf):
+    """The paper a PDF belongs to, as (paper, result, note). The tag in the file name comes
+    first, then the DOI printed inside the PDF, then the title in the file name, which
+    counts only when the paper found reads like it AND agrees with the name on its kind,
+    the numbers in the title, the year and the first author. The tool never guesses. The
+    result is "" with a paper, else NO_MATCH (the closest paper was refused, or its title
+    is too far) or NO_DOI (nothing found at all)."""
+    tag = tag_in_name(pdf.name)
+    paper = tag and (resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1]))
+    if paper:
+        return paper, "", ""
+    doi = doi_in_pdf(pdf)
+    paper = resolve_doi(doi) if doi else None
+    if paper:
+        return paper, "", ""
+    year, author, title = name_parts(pdf.stem)
+    found, note = match_title(title, year, author)
+    if found:
+        return found, "", ""
+    if note:
+        return None, "NO_MATCH", note
+    return None, "NO_DOI", ("no tag in the name, " + ("the DOI inside matched no paper" if doi else
+                                                     "no DOI inside") + " and no paper found for the title")
+
+
+def import_one(pdf, topic, args, seen):
+    """Import one PDF into its topic folder. Returns the result word for the count line."""
+    try:
+        with open(pdf, "rb") as fh:
+            is_pdf = fh.read(5).startswith(b"%PDF")
+    except OSError as e:
+        print(f"UNREADABLE  {pdf}  ({e.strerror})")
+        return "UNREADABLE"
+    if not is_pdf:
+        print(f"NOT_A_PDF  {pdf}")
+        return "NOT_A_PDF"
+    digest = sha256_of(pdf)
+    if digest in seen["digests"] or indexed_file(digest):
+        print(f"DUPLICATE_BYTES  {pdf}\n       the same bytes are in the library already, or in an earlier file of this run")
+        return "DUPLICATE_BYTES"
+    paper, result, note = identify(pdf)
+    if not paper:
+        print(f"{result}  {pdf}\n       {note}\n"
+              f"       To file it by hand: rename it with \"[PMID n]\", put it in the topic folder, "
+              f"then run: python3 paper_fetch.py get <PMID> --topic \"{topic}\"")
+        return result
+    existing = find_existing(paper)
+    if existing or file_tag(paper) in seen["tags"]:
+        where = existing or f"[{file_tag(paper)}] from an earlier file in this run"
+        print(f"EXISTS  {where}  (left {pdf.name} where it is)")
+        seen["digests"].add(digest)
+        return "EXISTS"
+    folder = topic_dir(topic)
+    path = folder / pdf_name(paper)
+    if args.dry_run:
+        print(f"WOULD_IMPORT  {pdf}\n       -> {path}\n       {describe(paper)}")
+        seen["tags"].add(file_tag(paper))
+        seen["digests"].add(digest)
+        return "WOULD_IMPORT"
+    make_folder(folder)
+    # copyfile, not copy2: the library drive may be exFAT, where copying file metadata fails
+    copy = shutil.move if args.move else shutil.copyfile
+    into_place(path, lambda part: copy(str(pdf), str(part)))
+    index_paper(paper, path, "imported: " + pdf.name, digest)
+    append_bibtex(paper, folder)
+    # Only now, after the copy: a copy that failed, or a file that could not be identified,
+    # must not make a later copy of the same paper look like a duplicate
+    seen["tags"].add(file_tag(paper))
+    seen["digests"].add(digest)
+    print(f"IMPORTED  {path}\n       {describe(paper)} | from {pdf}")
+    if not args.no_figures:
+        report_figures(paper, path)
+    return "IMPORTED"
+
+
+def import_count_line(counts, dry_run=False):
+    """'IMPORTED 3 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 0'. A dry run counts
+    WOULD_IMPORT instead. NOT_A_PDF, UNREADABLE and ERROR are added when they happened."""
+    names = ["WOULD_IMPORT" if dry_run else "IMPORTED", "EXISTS", "DUPLICATE_BYTES", "NO_MATCH", "NO_DOI"]
+    names += [name for name in ("NOT_A_PDF", "UNREADABLE", "ERROR") if counts[name]]
+    return ("DRY_RUN  " if dry_run else "") + " | ".join(f"{name} {counts[name]}" for name in names)
+
+
 def cmd_import(args):
-    """File PDFs the user downloaded by hand (library, ResearchGate, an author)."""
+    """File PDFs downloaded by hand, or whole folders of them, into the library."""
     if not shutil.which("pdftotext"):
         sys.exit("error: import reads the DOI with poppler; install it with: brew install poppler")
-    files = [Path(f).expanduser() for f in args.files]
-    if not files:
+    problems = []
+    files = pdf_files(args.files, problems)
+    for folder, reason in problems:
+        print(f"UNREADABLE  {folder}  ({reason}); the PDFs in it were not seen")
+    if not args.files:
+        if not args.topic:
+            sys.exit("error: import with no file names needs --topic")
         downloads = Path.home() / "Downloads"
         cutoff = time.time() - args.days * 86400
         files = sorted(f for f in downloads.glob("*.pdf") if f.stat().st_mtime >= cutoff)
@@ -958,46 +1377,34 @@ def cmd_import(args):
             print(f"DRY_RUN  {len(files)} PDF file(s) in {downloads} from the last {args.days:g} "
                   f"day(s). Nothing was {'moved' if args.move else 'copied'}.")
             for f in files:
-                doi = doi_in_pdf(f)
-                print(f"       WOULD_IMPORT  {f} | DOI inside: {doi}" if doi else
-                      f"       NO_DOI        {f} | no DOI inside, it would be skipped")
+                tag, doi = tag_in_name(f.name), doi_in_pdf(f)
+                if tag:
+                    print(f"       WOULD_IMPORT  {f} | tag in the name: {tag[0].upper()} {tag[1]}")
+                elif doi:
+                    print(f"       WOULD_IMPORT  {f} | DOI inside: {doi}")
+                else:
+                    print(f"       NO_DOI        {f} | no tag in the name and no DOI inside: the title "
+                          f"in the name would be tried, and the file is skipped unless a paper matches it closely")
             print("       Check the list: a personal document that cites a paper has a DOI inside too.\n"
                   "       Then name the files to import, or run the same command with --yes.")
             return 2
-    ok = True
+    elif not files:
+        print(f"NO_FILES  no PDF file under: {', '.join(args.files)}")
+        return 2
+    if args.dry_run:
+        print(f"DRY_RUN  {len(files)} PDF file(s). Nothing will be copied or moved.")
+    seen, counts = {"digests": set(), "tags": set()}, collections.Counter()
+    if problems:
+        counts["UNREADABLE"] += len(problems)
     for f in files:
         try:
-            with open(f, "rb") as fh:
-                is_pdf = fh.read(5).startswith(b"%PDF")
-        except OSError as e:
-            print(f"UNREADABLE  {f}  ({e.strerror})")
-            ok = False
-            continue
-        if not is_pdf:
-            print(f"NOT_A_PDF  {f}")
-            ok = False
-            continue
-        doi = doi_in_pdf(f)
-        paper = resolve_doi(doi) if doi else None
-        if not paper:
-            print(f"NO_DOI  {f}\n       No readable DOI. Rename it with \"[PMID n]\", put it in the topic "
-                  f"folder, then run: python3 paper_fetch.py get <PMID> --topic \"{args.topic}\"")
-            ok = False
-            continue
-        existing = find_existing(paper)
-        if existing:
-            print(f"EXISTS  {existing}  (left {f.name} where it is)")
-            continue
-        folder = topic_dir(args.topic)
-        make_folder(folder)
-        path = folder / pdf_name(paper)
-        (shutil.move if args.move else shutil.copy2)(str(f), path)
-        index_paper(paper, path, "imported: " + f.name)
-        append_bibtex(paper, folder)
-        print(f"IMPORTED  {path}\n       {describe(paper)} | from {f}")
-        if not args.no_figures:
-            report_figures(paper, path)
-    return 0 if ok else 2
+            result = import_one(f, f.parent.name if args.topic_from_parent else args.topic, args, seen)
+        except NET_ERRORS as e:  # one bad answer or failed copy must not stop a whole folder
+            print(f"ERROR  {f} | not imported: {type(e).__name__}: {e}")
+            result = "ERROR"
+        counts[result] += 1
+    print(import_count_line(counts, args.dry_run))
+    return 0 if all(r in ("IMPORTED", "WOULD_IMPORT", "EXISTS", "DUPLICATE_BYTES") for r in counts) else 2
 
 
 def openalex_cites(pmids):
@@ -1045,6 +1452,100 @@ def cmd_search(args):
     return finish_run([get_one(p["pmid"], args.topic, not args.no_figures, args.emails) for p in papers])
 
 
+def library_files():
+    """Every PDF in a topic folder of the library, folder by folder, in name order."""
+    if not ROOT.exists():
+        return []
+    return [f for d in sorted(ROOT.iterdir()) if d.is_dir() for f in sorted(d.iterdir())
+            if f.is_file() and f.suffix.lower() == ".pdf" and not f.name.startswith(".")]
+
+
+def rebuild_index():
+    """Write _index.csv from the files on disk, one row per PDF in a topic folder. A row the
+    index already holds (matched by path, then by bytes, then by tag) is kept, with its
+    file, topic and sha256 refreshed. A file the index does not know gets its metadata
+    from PubMed or OpenAlex by the tag in its name, one lookup per tag, at PubMed's 3 per
+    second. A file without a tag is listed and left out. Rows of files that are gone are
+    dropped."""
+    old = index_rows()
+    by_file = {r.get("file"): r for r in old}
+    by_sha = {r["sha256"]: r for r in old if r.get("sha256")}
+    by_tag = {("pmid", r["pmid"]): r for r in old if r.get("pmid")}
+    by_tag.update({("doi", r["doi"]): r for r in old if r.get("doi")})
+    rows, counts, resolved, kept = [], collections.Counter(), {}, set()
+    for f in library_files():
+        rel = str(f.relative_to(ROOT))
+        tag = tag_in_name(f.name)
+        if not tag:
+            print(f"NO_TAG  {rel}")
+            counts["NO_TAG"] += 1
+            continue
+        digest = sha256_of(f)
+        row = by_file.get(rel) or by_sha.get(digest) or by_tag.get(tag)
+        extra = {k: v for k, v in (row or {}).items() if k not in INDEX_FIELDS}  # hand-added columns
+        if row is not None:
+            kept.add(id(row))
+            if row.get("title"):  # a row without a title is a placeholder: resolve it again
+                rows.append({**row, "file": rel, "topic": f.parent.name, "sha256": digest})
+                counts["KEPT"] += 1
+                continue
+        if tag not in resolved:
+            paper = resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1])
+            if not paper and tag[0] == "doi":
+                # file_tag() writes "/" and every other special character as "_", so a DOI
+                # with brackets or a second "/" cannot be read back from the name
+                doi = doi_in_pdf(f)
+                paper = resolve_doi(doi) if doi else None
+            resolved[tag] = paper
+        paper = resolved[tag]
+        if paper:
+            rows.append({**extra, **index_row(paper, f, "on disk", digest)})
+            print(f"ADDED  {rel}\n       {describe(paper)}")
+            counts["ADDED"] += 1
+        else:
+            row = {**extra, "saved_at": datetime.now().isoformat(timespec="seconds"), "topic": f.parent.name,
+                   "file": rel, "sha256": digest, "source": "on disk", "oa_status": "unknown"}
+            if tag[0] == "pmid":  # exact in a name; a DOI read from a name may be altered
+                row["pmid"] = tag[1]
+            rows.append(row)
+            print(f"NO_METADATA  {rel}\n       {tag[0].upper()} {tag[1]} matched no paper; the row holds "
+                  f"the file{' and the PMID' if tag[0] == 'pmid' else ''} only")
+            counts["NO_METADATA"] += 1
+    write_index(rows)
+    dropped = sum(1 for r in old if id(r) not in kept)
+    print(f"INDEX  {len(rows)} rows in {ROOT / '_index.csv'}: kept {counts['KEPT']} | added {counts['ADDED']} "
+          f"| no metadata {counts['NO_METADATA']} | dropped {dropped} | files without a tag {counts['NO_TAG']}")
+    return 0
+
+
+def library_stats():
+    """Papers per topic, files without a tag, and groups of files with the same bytes."""
+    files = library_files()
+    print(ROOT)
+    per_topic = collections.Counter(f.parent.name for f in files)
+    for topic, n in sorted(per_topic.items()):
+        print(f"  {n:>4}  {topic}")
+    print(f"PAPERS  {len(files)} PDF files in {len(per_topic)} topic folders | {len(index_rows())} index rows")
+    untagged = [f for f in files if not tag_in_name(f.name)]
+    print(f"NO_TAG  {len(untagged)} file(s) without a [PMID n] or [DOI ...] tag in the name")
+    for f in untagged:
+        print(f"       {f.relative_to(ROOT)}")
+    groups = collections.defaultdict(list)
+    for f in files:
+        groups[sha256_of(f)].append(f)
+    same = [group for group in groups.values() if len(group) > 1]
+    print(f"DUPLICATE_BYTES  {len(same)} group(s) of files with the same bytes")
+    for n, group in enumerate(same, 1):
+        print(f"       group {n}: {len(group)} files")
+        for f in group:
+            print(f"       {f.relative_to(ROOT)}")
+    return 0
+
+
+def cmd_library(args):
+    return {"rebuild-index": rebuild_index, "stats": library_stats}[args.what]()
+
+
 def cmd_topics(args):
     print(ROOT)
     if ROOT.exists():
@@ -1076,20 +1577,32 @@ def main():
     s.add_argument("--topic", help="topic folder for --download")
     s.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     s.add_argument("--emails", action="store_true", help=emails_help)
-    i = sub.add_parser("import", help="file PDFs you downloaded yourself, found by the DOI inside them")
-    i.add_argument("files", nargs="*", help="PDF files; none = list the PDFs in ~/Downloads from the "
-                                            "last --days and copy nothing, unless --yes is given")
-    i.add_argument("--topic", required=True)
+    i = sub.add_parser("import", help="file PDFs you downloaded yourself, or whole folders of them, "
+                                      "into the library")
+    i.add_argument("files", nargs="*", help="PDF files or folders (every PDF under a folder counts); "
+                                            "none = list the PDFs in ~/Downloads from the last --days "
+                                            "and copy nothing, unless --yes is given")
+    where = i.add_mutually_exclusive_group(required=True)
+    where.add_argument("--topic", help='topic folder for every file, e.g. "Peri-implantitis"')
+    where.add_argument("--topic-from-parent", action="store_true",
+                       help="file each PDF under the name of its parent folder")
     i.add_argument("--days", type=float, default=1)
     i.add_argument("--yes", action="store_true",
                    help="with no file names: import the listed PDFs from ~/Downloads")
     i.add_argument("--move", action="store_true", help="move instead of copy")
+    i.add_argument("--dry-run", action="store_true",
+                   help="print what would happen to each file and copy nothing")
     i.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     sub.add_parser("topics", help="list topic folders and how many PDFs each holds")
+    lib = sub.add_parser("library", help="rebuild-index: write _index.csv from the files on disk; "
+                                         "stats: papers per topic, files without a tag, duplicate files")
+    lib.add_argument("what", choices=["rebuild-index", "stats"])
     args = ap.parse_args()
+    if args.cmd != "search" or args.download:  # every command that reads or writes the folder
+        require_drive()
     try:
         return {"get": cmd_get, "search": cmd_search, "import": cmd_import,
-                "topics": cmd_topics}[args.cmd](args)
+                "topics": cmd_topics, "library": cmd_library}[args.cmd](args)
     except NET_ERRORS as e:
         print(f"error: network problem or bad answer from PubMed: {e}", file=sys.stderr)
         return 1
