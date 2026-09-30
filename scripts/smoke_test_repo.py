@@ -457,8 +457,8 @@ def test_paper_fetch_import_needs_yes() -> None:
         pf.shutil = tools_found("pdftotext", "pdfinfo")
         pf.doi_in_pdf = lambda pdf: "10.1234/invented.501"
         pf.time = types.SimpleNamespace(sleep=lambda seconds: None, time=__import__("time").time)
-        args = types.SimpleNamespace(files=[], topic="Test topic", days=1, move=False, yes=False,
-                                     no_figures=True)
+        args = types.SimpleNamespace(files=[], topic="Test topic", topic_from_parent=False, days=1,
+                                     move=False, yes=False, dry_run=False, no_figures=True)
         keep = {name: os.environ.get(name) for name in ("HOME", "USERPROFILE")}
         os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
         try:
@@ -564,6 +564,106 @@ def test_paper_fetch_index_columns() -> None:
             fail("a paper whose OpenAlex record was not read has oa_status unknown")
         if pf.http_get.calls:
             fail("indexing must read no OpenAlex record on its own")
+
+
+def pubmed_summary(pmid: str, title: str, doi: str = "") -> bytes:
+    ids = [{"idtype": "pubmed", "value": pmid}] + ([{"idtype": "doi", "value": doi}] if doi else [])
+    return json.dumps({"result": {"uids": [pmid], pmid: {
+        "uid": pmid, "title": title + ".", "source": "Invented J", "pubdate": "2020 Oct",
+        "authors": [{"name": "Example A"}], "articleids": ids}}}).encode()
+
+
+def pubmed_found(*pmids: str) -> bytes:
+    return json.dumps({"esearchresult": {"idlist": list(pmids), "count": str(len(pmids))}}).encode()
+
+
+def import_test_module(papers: pathlib.Path):
+    """paper_fetch with a fake PubMed, a fake DOI reader and a shutil that only copies."""
+    pf = load_paper_fetch(papers, [
+        ("id=1001", pubmed_summary("1001", "Invented test paper on bone levels", "10.1234/invented.1001")),
+        ("id=1002", pubmed_summary("1002", "Completely different paper about something else")),
+        ("id=1003", pubmed_summary("1003", "Invented scan with a DOI inside", "10.1234/invented.1003")),
+        ("invented.1003%5Bdoi%5D", pubmed_found("1003")),
+        ("Some+other+invented+title", pubmed_found("1002")),
+        ("made-up-title", pubmed_found()),
+        ("api.crossref.org", b'{"message": {"items": []}}'),
+    ])
+    pf.doi_in_pdf = lambda pdf: "10.1234/invented.1003" if pdf.name == "scan.pdf" else ""
+    pf.shutil = types.SimpleNamespace(which=lambda tool, path=None: "/usr/bin/pdftotext" if tool == "pdftotext" else None,
+                                      copyfile=__import__("shutil").copyfile, copy2=tools_found().copy2,
+                                      move=tools_found().move)
+    return pf
+
+
+def test_paper_fetch_import_folder() -> None:
+    """import takes a folder, files each PDF by the tag in its name, the DOI inside or a close
+    title match, skips the same bytes and the same paper, never guesses, never deletes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        source = pathlib.Path(tmp) / "source" / "Peri-implantitis"
+        source.mkdir(parents=True)
+        same, other = b"%PDF-1.4 the same bytes\n", b"%PDF-1.4 another scan\n"
+        (source / "2020 - Example - Invented test paper on bone levels [PMID 1001].pdf").write_bytes(same)
+        (source / "Another scan [PMID 1001].pdf").write_bytes(other)
+        (source / "Some other invented title far away.pdf").write_bytes(b"%PDF-1.4 no match\n")
+        (source / "copy of the same.pdf").write_bytes(same)
+        (source / "made-up-title.pdf").write_bytes(b"%PDF-1.4 nothing\n")
+        (source / "scan.pdf").write_bytes(b"%PDF-1.4 doi inside\n")
+        (source / "._hidden.pdf").write_bytes(b"Finder metadata, not a PDF")
+        before = sorted(f.name for f in source.iterdir())
+        papers = pathlib.Path(tmp) / "papers"
+        args = types.SimpleNamespace(files=[str(source.parent)], topic=None, topic_from_parent=True, days=1,
+                                     move=False, yes=False, dry_run=True, no_figures=True)
+
+        # A dry run says what would happen and writes nothing
+        pf = import_test_module(papers)
+        code, text = printed(pf.cmd_import, args)
+        expected = "DRY_RUN  WOULD_IMPORT 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 1"
+        if code != 2 or text.strip().splitlines()[-1] != expected:
+            fail(f"dry run: expected exit 2 and {expected!r}, got {code}: {text}")
+        if papers.exists() or "._hidden" in text:
+            fail("a dry run must write nothing, and Finder metadata files are skipped")
+        if "-> " + str(papers / "Peri-implantitis" / "2020 Example - Invented test paper on bone levels - Invented J [PMID 1001].pdf") not in text:
+            fail(f"the dry run must show the target name with the parent folder as topic, got: {text}")
+
+        # The real run copies, indexes with sha256 and leaves every source file in place
+        args.dry_run = False
+        pf = import_test_module(papers)
+        code, text = printed(pf.cmd_import, args)
+        expected = "IMPORTED 2 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 1"
+        if code != 2 or text.strip().splitlines()[-1] != expected:
+            fail(f"import: expected exit 2 and {expected!r}, got {code}: {text}")
+        saved = sorted(f.name for f in (papers / "Peri-implantitis").iterdir() if f.suffix == ".pdf")
+        if saved != ["2020 Example - Invented scan with a DOI inside - Invented J [PMID 1003].pdf",
+                     "2020 Example - Invented test paper on bone levels - Invented J [PMID 1001].pdf"]:
+            fail(f"unexpected files in the topic folder: {saved!r}")
+        if (papers / "Peri-implantitis" / saved[1]).read_bytes() != same:
+            fail("the imported file must hold the source bytes")
+        if sorted(f.name for f in source.iterdir()) != before:
+            fail("import must never delete or move a source file")
+        rows = pf.index_rows()
+        if [r["pmid"] for r in rows] != ["1001", "1003"] or any(len(r["sha256"]) != 64 for r in rows):
+            fail(f"the index must hold one row per imported file with its sha256, got {rows!r}")
+        if 'closest title found: "Completely different paper about something else"' not in text:
+            fail(f"NO_MATCH must name the closest title and its score, got: {text}")
+        if "no DOI inside and no paper found for the title" not in text:
+            fail(f"NO_DOI must say what was tried, got: {text}")
+        if "EXISTS  " + str(papers / "Peri-implantitis" / saved[1]) not in text:
+            fail(f"a second scan of the same paper must be EXISTS, got: {text}")
+
+        # Run again: every file already in the library is the same bytes, so no lookup is made for it
+        pf = import_test_module(papers)
+        code, text = printed(pf.cmd_import, args)
+        if text.strip().splitlines()[-1] != "IMPORTED 0 | EXISTS 1 | DUPLICATE_BYTES 3 | NO_MATCH 1 | NO_DOI 1":
+            fail(f"a second import of the same folder must skip by bytes, got: {text}")
+        if any("id=1003" in call for call in pf.http_get.calls):
+            fail("a file whose bytes are in the index must cost no lookup")
+
+    help_text = run([sys.executable, PAPER_FETCH, "import", "--help"]).stdout
+    for flag in ("--topic-from-parent", "--dry-run"):
+        if flag not in help_text:
+            fail(f"paper_fetch.py import --help does not list {flag}")
+    if "TITLE_MATCH = 0.85" not in (ROOT / PAPER_FETCH).read_text(encoding="utf-8"):
+        fail("a title found by a file name must need a similarity above 0.85")
 
 
 def test_paper_fetch_sources_and_safety() -> None:
@@ -717,6 +817,7 @@ TESTS = [
     test_paper_fetch_mount_guard,
     test_paper_fetch_file_names,
     test_paper_fetch_index_columns,
+    test_paper_fetch_import_folder,
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
     test_fixtures,

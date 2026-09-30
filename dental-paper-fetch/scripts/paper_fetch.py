@@ -23,8 +23,11 @@ same link is tried once with the system curl, also with checking on.
 For a paper that did not download it prints ResearchGate and Academia.edu search links and
 points to the PubMed record for the corresponding author's address. With --emails it prints
 the author email addresses found in the PubMed record. Those addresses are for a full-text
-request only. `import` files PDFs downloaded by hand (library, ResearchGate, an author) by
-reading the DOI printed inside them.
+request only. `import` files PDFs downloaded by hand (library, ResearchGate, an author),
+one file or a whole folder, by the [PMID n] tag in the file name, else the DOI printed
+inside the PDF, else the title in the file name when a paper matches it closely. A file
+that matches nothing is listed and left where it is: the tool never guesses and never
+deletes a source file.
 
 Environment variables, all optional:
   PAPERS_DIR         folder for everything the tool saves; default: ./papers under the
@@ -57,12 +60,15 @@ Usage:
   paper_fetch.py search "peri-implantitis surgical" --min-year 2018 --sort cites --max 10 --free
   paper_fetch.py search "peri-implantitis surgical" --max 5 --download --topic "Peri-implantitis"
   paper_fetch.py import ~/Downloads/jcpe12345.pdf --topic "Peri-implantitis"
+  paper_fetch.py import ~/Papers --topic-from-parent            # every PDF under ~/Papers, topic = its folder
+  paper_fetch.py import ~/Papers --topic-from-parent --dry-run  # says what would happen, copies nothing
   paper_fetch.py import --topic "Peri-implantitis"          # lists PDFs in ~/Downloads from the last day
   paper_fetch.py import --topic "Peri-implantitis" --yes    # imports the PDFs on that list
   paper_fetch.py topics
 
 Exit codes: 0 all saved or already there, 2 at least one paper not saved (normal, most
-papers are paywalled) or `import` listed files and copied nothing, 1 error.
+papers are paywalled) or `import` listed files and copied nothing or skipped a file that
+matched no paper, 1 error.
 Needs Python 3.10 or newer and only the standard library. Figures from PDFs outside PubMed
 Central need poppler (pdfimages, pdftoppm, pdftotext); without it those papers get no figures
 and the tool prints once how to install it.
@@ -301,7 +307,16 @@ def resolve(ident):
         return doi_from_openalex(papers[0] if papers and papers[0]["pmcid"] == s.upper() else None), ""
     if doi_match:
         return resolve_doi(doi_match.group(0).rstrip(".").lower()), ""
-    # A title: PubMed first, Crossref for papers outside PubMed; keep the closer match
+    best, score = resolve_title(s)
+    if not best:
+        return None, ""
+    return best, "" if score > 0.8 else f'CHECK  title search matched "{best["title"]}"'
+
+
+def resolve_title(s):
+    """(paper, score) for the closest title in PubMed, or in Crossref for papers outside
+    PubMed; the score is the similarity between s and that title. (None, 0.0) when nothing
+    matches."""
     candidates = pubmed_papers(pubmed_search(f"{s}[ti]", 1)[0])
     doi = crossref_doi(s)
     if doi and not any(p["doi"] == doi for p in candidates):
@@ -309,10 +324,9 @@ def resolve(ident):
         if found:
             candidates.append(found)
     if not candidates:
-        return None, ""
+        return None, 0.0
     best = max(candidates, key=lambda p: similarity(s, p["title"]))
-    note = "" if similarity(s, best["title"]) > 0.8 else f'CHECK  title search matched "{best["title"]}"'
-    return doi_from_openalex(best), note
+    return doi_from_openalex(best), similarity(s, best["title"])
 
 
 # ---------- finding a free legal PDF ----------
@@ -1003,12 +1017,128 @@ def doi_in_pdf(pdf):
     return ""
 
 
+NAME_TAG = re.compile(r"\[(PMID|DOI) ([^\]]+)\]")
+TITLE_MATCH = 0.85  # a paper found by the title in a file name must match it this closely
+
+
+def tag_in_name(name):
+    """('pmid', '123') or ('doi', '10.1111/jcpe.12345') from the "[PMID n]" or "[DOI ...]"
+    tag in a file name, else None. file_tag() writes the "/" of a DOI as "_"; the first "_"
+    after the DOI prefix is turned back into "/"."""
+    m = NAME_TAG.search(name)
+    if not m:
+        return None
+    kind, value = m.group(1).lower(), m.group(2).strip()
+    if kind == "pmid":
+        return ("pmid", value) if value.isdigit() else None
+    return "doi", re.sub(r"^(10\.\d{4,9})_", r"\1/", value).lower()
+
+
+def title_in_name(stem):
+    """The title in a file name: what follows "<year> - <author> - " or "<year> <author> - ",
+    without any [PMID n] or [DOI ...] tag; otherwise the whole stem."""
+    stem = NAME_TAG.sub("", stem).strip()
+    m = re.match(r"(?:\d{4}|n\.d\.)\s+-?\s*.+?\s+-\s+(.+)", stem)
+    return (m.group(1) if m else stem).strip(" -")
+
+
+def pdf_files(paths):
+    """The PDFs named on the command line. A folder gives every PDF under it, subfolders
+    included. Names that start with a dot (Finder metadata on external drives) are skipped."""
+    files = []
+    for path in (Path(p).expanduser() for p in paths):
+        if path.is_dir():
+            files += sorted(f for f in path.rglob("*") if f.is_file() and f.suffix.lower() == ".pdf"
+                            and not f.name.startswith("."))
+        else:
+            files.append(path)
+    return files
+
+
+def identify(pdf):
+    """The paper a PDF belongs to, as (paper, result, note). The tag in the file name comes
+    first, then the DOI printed inside the PDF, then the title in the file name, which
+    counts only when the paper found matches it closely. The tool never guesses. The result
+    is "" with a paper, else NO_MATCH (the closest title is too far) or NO_DOI (nothing)."""
+    tag = tag_in_name(pdf.name)
+    paper = tag and (resolve(tag[1])[0] if tag[0] == "pmid" else resolve_doi(tag[1]))
+    if paper:
+        return paper, "", ""
+    doi = doi_in_pdf(pdf)
+    paper = resolve_doi(doi) if doi else None
+    if paper:
+        return paper, "", ""
+    title = title_in_name(pdf.stem)
+    found, score = resolve_title(title)
+    if found and score > TITLE_MATCH:
+        return found, "", ""
+    if found:
+        return None, "NO_MATCH", (f'closest title found: "{found["title"]}" '
+                                  f"({score:.2f} of 1.00; more than {TITLE_MATCH} is needed)")
+    return None, "NO_DOI", ("no tag in the name, " + ("the DOI inside matched no paper" if doi else
+                                                     "no DOI inside") + " and no paper found for the title")
+
+
+def import_one(pdf, topic, args, seen):
+    """Import one PDF into its topic folder. Returns the result word for the count line."""
+    try:
+        with open(pdf, "rb") as fh:
+            is_pdf = fh.read(5).startswith(b"%PDF")
+    except OSError as e:
+        print(f"UNREADABLE  {pdf}  ({e.strerror})")
+        return "UNREADABLE"
+    if not is_pdf:
+        print(f"NOT_A_PDF  {pdf}")
+        return "NOT_A_PDF"
+    digest = sha256_of(pdf)
+    if digest in seen["digests"] or in_index(digest=digest):
+        print(f"DUPLICATE_BYTES  {pdf}\n       a file with the same bytes is already in the library")
+        return "DUPLICATE_BYTES"
+    seen["digests"].add(digest)
+    paper, result, note = identify(pdf)
+    if not paper:
+        print(f"{result}  {pdf}\n       {note}\n"
+              f"       To file it by hand: rename it with \"[PMID n]\", put it in the topic folder, "
+              f"then run: python3 paper_fetch.py get <PMID> --topic \"{topic}\"")
+        return result
+    existing = find_existing(paper)
+    if existing or file_tag(paper) in seen["tags"]:
+        where = existing or f"[{file_tag(paper)}] from an earlier file in this run"
+        print(f"EXISTS  {where}  (left {pdf.name} where it is)")
+        return "EXISTS"
+    seen["tags"].add(file_tag(paper))
+    folder = topic_dir(topic)
+    path = folder / pdf_name(paper)
+    if args.dry_run:
+        print(f"WOULD_IMPORT  {pdf}\n       -> {path}\n       {describe(paper)}")
+        return "WOULD_IMPORT"
+    make_folder(folder)
+    # copyfile, not copy2: the library drive may be exFAT, where copying file metadata fails
+    (shutil.move if args.move else shutil.copyfile)(str(pdf), str(path))
+    index_paper(paper, path, "imported: " + pdf.name, digest)
+    append_bibtex(paper, folder)
+    print(f"IMPORTED  {path}\n       {describe(paper)} | from {pdf}")
+    if not args.no_figures:
+        report_figures(paper, path)
+    return "IMPORTED"
+
+
+def import_count_line(counts, dry_run=False):
+    """'IMPORTED 3 | EXISTS 1 | DUPLICATE_BYTES 1 | NO_MATCH 1 | NO_DOI 0'. A dry run counts
+    WOULD_IMPORT instead. NOT_A_PDF, UNREADABLE and ERROR are added when they happened."""
+    names = ["WOULD_IMPORT" if dry_run else "IMPORTED", "EXISTS", "DUPLICATE_BYTES", "NO_MATCH", "NO_DOI"]
+    names += [name for name in ("NOT_A_PDF", "UNREADABLE", "ERROR") if counts[name]]
+    return ("DRY_RUN  " if dry_run else "") + " | ".join(f"{name} {counts[name]}" for name in names)
+
+
 def cmd_import(args):
-    """File PDFs the user downloaded by hand (library, ResearchGate, an author)."""
+    """File PDFs downloaded by hand, or whole folders of them, into the library."""
     if not shutil.which("pdftotext"):
         sys.exit("error: import reads the DOI with poppler; install it with: brew install poppler")
-    files = [Path(f).expanduser() for f in args.files]
-    if not files:
+    files = pdf_files(args.files)
+    if not args.files:
+        if not args.topic:
+            sys.exit("error: import with no file names needs --topic")
         downloads = Path.home() / "Downloads"
         cutoff = time.time() - args.days * 86400
         files = sorted(f for f in downloads.glob("*.pdf") if f.stat().st_mtime >= cutoff)
@@ -1024,40 +1154,21 @@ def cmd_import(args):
             print("       Check the list: a personal document that cites a paper has a DOI inside too.\n"
                   "       Then name the files to import, or run the same command with --yes.")
             return 2
-    ok = True
+    elif not files:
+        print(f"NO_FILES  no PDF file under: {', '.join(args.files)}")
+        return 2
+    if args.dry_run:
+        print(f"DRY_RUN  {len(files)} PDF file(s). Nothing will be copied or moved.")
+    seen, counts = {"digests": set(), "tags": set()}, collections.Counter()
     for f in files:
         try:
-            with open(f, "rb") as fh:
-                is_pdf = fh.read(5).startswith(b"%PDF")
-        except OSError as e:
-            print(f"UNREADABLE  {f}  ({e.strerror})")
-            ok = False
-            continue
-        if not is_pdf:
-            print(f"NOT_A_PDF  {f}")
-            ok = False
-            continue
-        doi = doi_in_pdf(f)
-        paper = resolve_doi(doi) if doi else None
-        if not paper:
-            print(f"NO_DOI  {f}\n       No readable DOI. Rename it with \"[PMID n]\", put it in the topic "
-                  f"folder, then run: python3 paper_fetch.py get <PMID> --topic \"{args.topic}\"")
-            ok = False
-            continue
-        existing = find_existing(paper)
-        if existing:
-            print(f"EXISTS  {existing}  (left {f.name} where it is)")
-            continue
-        folder = topic_dir(args.topic)
-        make_folder(folder)
-        path = folder / pdf_name(paper)
-        (shutil.move if args.move else shutil.copy2)(str(f), path)
-        index_paper(paper, path, "imported: " + f.name)
-        append_bibtex(paper, folder)
-        print(f"IMPORTED  {path}\n       {describe(paper)} | from {f}")
-        if not args.no_figures:
-            report_figures(paper, path)
-    return 0 if ok else 2
+            result = import_one(f, f.parent.name if args.topic_from_parent else args.topic, args, seen)
+        except NET_ERRORS as e:  # one bad answer must not stop a run over a whole folder
+            print(f"ERROR  {f} | network problem or bad answer: {e}")
+            result = "ERROR"
+        counts[result] += 1
+    print(import_count_line(counts, args.dry_run))
+    return 0 if all(r in ("IMPORTED", "WOULD_IMPORT", "EXISTS", "DUPLICATE_BYTES") for r in counts) else 2
 
 
 def openalex_cites(pmids):
@@ -1136,14 +1247,21 @@ def main():
     s.add_argument("--topic", help="topic folder for --download")
     s.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     s.add_argument("--emails", action="store_true", help=emails_help)
-    i = sub.add_parser("import", help="file PDFs you downloaded yourself, found by the DOI inside them")
-    i.add_argument("files", nargs="*", help="PDF files; none = list the PDFs in ~/Downloads from the "
-                                            "last --days and copy nothing, unless --yes is given")
-    i.add_argument("--topic", required=True)
+    i = sub.add_parser("import", help="file PDFs you downloaded yourself, or whole folders of them, "
+                                      "into the library")
+    i.add_argument("files", nargs="*", help="PDF files or folders (every PDF under a folder counts); "
+                                            "none = list the PDFs in ~/Downloads from the last --days "
+                                            "and copy nothing, unless --yes is given")
+    where = i.add_mutually_exclusive_group(required=True)
+    where.add_argument("--topic", help='topic folder for every file, e.g. "Peri-implantitis"')
+    where.add_argument("--topic-from-parent", action="store_true",
+                       help="file each PDF under the name of its parent folder")
     i.add_argument("--days", type=float, default=1)
     i.add_argument("--yes", action="store_true",
                    help="with no file names: import the listed PDFs from ~/Downloads")
     i.add_argument("--move", action="store_true", help="move instead of copy")
+    i.add_argument("--dry-run", action="store_true",
+                   help="print what would happen to each file and copy nothing")
     i.add_argument("--no-figures", action="store_true", help="skip figure extraction")
     sub.add_parser("topics", help="list topic folders and how many PDFs each holds")
     args = ap.parse_args()
