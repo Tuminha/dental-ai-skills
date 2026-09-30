@@ -422,7 +422,7 @@ The seven `test_paper_fetch_*` tests after `test_paper_fetch_offline` load the s
 - [ ] `test_paper_fetch_pmid_without_doi`: a PMID with no DOI in PubMed gets its DOI from one OpenAlex call, `works/pmid:<pmid>`, a record with another title is refused, and an answer of `null` or `[]` leaves the paper without a DOI
 - [ ] `test_paper_fetch_certificate_retry`: a certificate error is retried once with curl, with `-q` first, `--fail`, and never `-k` or `--insecure`; when curl fails the check too (exit 60), `OPEN_MANUALLY` names the certificate problem; a time limit (curl exit 28, or Python) says "did not answer in time"; an HTTP error (exit 22) says the site blocks scripts
 - [ ] `test_paper_fetch_import_needs_yes`: `import` with no file names lists the PDFs and copies nothing without `--yes`
-- [ ] `test_paper_fetch_sources_and_safety`: OpenAIRE links of the same DOI only and string links from a list only, the PDF marker check, the count line, the refused redirect for the CORE key, the poppler time limit (figures and `import`) and the one-time install note
+- [ ] `test_paper_fetch_sources_and_safety`: OpenAIRE links of the same DOI only, never a doi.org or dx.doi.org resolver link (a record with only doi.org and pubmed instances yields no candidate), and string links from a list only, the PDF marker check, the count line, the refused redirect for the CORE key, the poppler time limit (figures and `import`) and the one-time install note
 - [ ] `test_paper_fetch_notice_pdf`: a one-page PDF under 60 KB is a repository notice, never saved; `OPEN_MANUALLY` says so; a two-page PDF is saved as before
 
 ---

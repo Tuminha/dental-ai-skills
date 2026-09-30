@@ -512,6 +512,17 @@ def test_paper_fetch_sources_and_safety() -> None:
         if pf.openaire_pdfs(paper) != ["https://repository.example/a.pdf"]:
             fail(f"OpenAIRE: only string links from a list count, got {pf.openaire_pdfs(paper)!r}")
 
+        # Resolver links are not repository copies: doi.org and pubmed instances alone give no candidate
+        resolver_only = {"results": [{"pids": [{"scheme": "doi", "value": "10.1234/invented.601"}], "instances": [
+            {"accessRight": {"label": "OPEN"}, "urls": ["https://doi.org/10.1234/invented.601"]},
+            {"accessRight": {"label": "OPEN"}, "urls": ["https://dx.doi.org/10.1234/invented.601",
+                                                        "https://pubmed.ncbi.nlm.nih.gov/601"]}]}]}
+        pf.http_get = FakeNetwork([("api.openaire.eu/graph/v3/research-products", json.dumps(resolver_only).encode())])
+        if pf.openaire_pdfs(paper) != []:
+            fail(f"OpenAIRE: a doi.org or dx.doi.org link is a resolver, not a copy, got {pf.openaire_pdfs(paper)!r}")
+        if [label for label, _ in pf.pdf_candidates(paper)]:
+            fail("a record with only doi.org and pubmed instances must yield no candidate")
+
         results = ([("SAVED", "PubMed Central")] * 10 + [("SAVED", "OpenAlex")] * 2
                    + [("OPEN_MANUALLY", "")] * 8 + [("NO_FREE_COPY", "")] * 20)
         expected = "SAVED 12: PubMed Central 10, OpenAlex 2 | OPEN_MANUALLY 8 | NO_FREE_COPY 20"

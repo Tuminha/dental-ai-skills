@@ -206,7 +206,7 @@ Gets the paper, so the appraisal reads the full text:
 - **Input**: a PMID, DOI, PMCID or title. `search` lists PubMed results, with citation counts from OpenAlex.
 - **Legal open-access sources only**: the PubMed Central open-access bucket, OpenAlex locations, Europe PMC, CORE (with your own key), OpenAIRE and Semantic Scholar. No Sci-Hub or similar sites. No way around a paywall, CAPTCHA or bot check.
 - **Clear result lines**: `SAVED`, `EXISTS`, `OPEN_MANUALLY`, `NO_FREE_COPY`, `NOT_FOUND`, then one count line per run with the saves per source. Exit code 2 means at least one paper was not saved, which is normal.
-- **Measured coverage**: about 30 of every 100 periodontology and implant papers download automatically. Most of the rest are paywalled. The skill lists what to do then: your own library access, author-posted copies, a request to the authors that you write and send.
+- **Measured coverage**: between 30 and 48 of every 100 periodontology and implant papers download automatically, in two samples of 100 and 40 papers; a fresh 100-paper run is still to do. Most of the rest are paywalled. The skill lists what to do then: your own library access, author-posted copies, a request to the authors that you write and send.
 - **Figures**: each figure is saved with its caption and the paper's license. `reuse_hint` says whether an image model may use a figure as a reference.
 - **Script**: `scripts/paper_fetch.py`, Python 3.10 or newer, standard library only. Files go to `PAPERS_DIR`, default `./papers`.
 
