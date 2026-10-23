@@ -1174,6 +1174,22 @@ def test_paper_fetch_sources_and_safety() -> None:
             fail(f"without poppler, the install help must print once, got {[t for _, t in calls]!r}")
 
 
+def test_hackathon_demo_offline() -> None:
+    """The Nebius demo must load research-critic without a network call or a key."""
+    keep = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "journal_club_runner_under_test",
+            ROOT / "hackathon-demo" / "journal_club_runner.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.offline_checks()
+    finally:
+        sys.dont_write_bytecode = keep
+
+
 def test_iasella_example_interval() -> None:
     """The example's CI note states n per group, df and a z-based screen that the calculator reproduces."""
     data = json.loads((ROOT / "examples" / "iasella-statistical-forensics-report-data.json").read_text(encoding="utf-8"))
@@ -1444,6 +1460,7 @@ TESTS = [
     test_paper_fetch_sources_and_safety,
     test_paper_fetch_notice_pdf,
     test_fixtures,
+    test_hackathon_demo_offline,
     test_iasella_golden_concepts,
     test_iasella_example_interval,
 ]
