@@ -46,6 +46,12 @@ Completed analysis → dental-evidence-report-artifact
 
 `research-critic`, `clinical-evidence-reviewer`, `dental-evidence-retriever`, `dental-statistical-forensics` and `dental-author-disclosures` read the full text, not the abstract. When the runtime can run scripts, they get the PDF with `dental-paper-fetch` first. Otherwise they ask for a PDF you may lawfully share. Their output states whether the full text, part of it or only the abstract was read.
 
+## Hackathon demo
+
+A local Streamlit app for the Nebius x NVIDIA Global AI Hackathon 2026 (Best Apps and Agents). It loads the `research-critic` skill from disk and calls an NVIDIA Nemotron model through Nebius Token Factory.
+
+The skill files stay unchanged. Setup, environment variables, and a journal-club script for a short video are in [hackathon-demo/README.md](hackathon-demo/README.md).
+
 ![Iasella statistical forensics report preview](examples/assets/iasella-forensics-preview.svg)
 
 ---
